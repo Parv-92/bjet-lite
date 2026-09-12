@@ -12,6 +12,7 @@
 import {
   TransactionCandidate,
   StatementMetadata,
+  CandidatePersistenceStatus,
 } from '../../types/receiptInterpretation';
 
 class StatementCandidateStore {
@@ -25,7 +26,22 @@ class StatementCandidateStore {
     metadata?: StatementMetadata,
     warnings?: string[]
   ) {
-    this.candidates = [...candidates];
+    this.candidates = candidates.map(c => {
+      const isDuplicate = !!c.duplicateInfo?.isDuplicate;
+      // Duplicates are excluded by default.
+      // SENT expenses, recognized reimbursements, and visible non-spending items (inflows, top-ups) are not excluded by default.
+      const isExcluded = isDuplicate;
+      const reviewStatus = isDuplicate
+        ? 'DUPLICATE_WARNING'
+        : c.reviewStatus || 'READY_FOR_REVIEW';
+
+      return {
+        ...c,
+        isExcluded,
+        reviewStatus,
+        persistenceStatus: 'NOT_SUBMITTED' as CandidatePersistenceStatus,
+      };
+    });
     this.metadata = metadata;
     this.warnings = warnings ? [...warnings] : [];
     this.notify();
@@ -46,7 +62,30 @@ class StatementCandidateStore {
   public updateCandidate(localId: string, updated: TransactionCandidate) {
     const idx = this.candidates.findIndex(c => c.localId === localId);
     if (idx !== -1) {
-      this.candidates[idx] = { ...updated };
+      const next = [...this.candidates];
+      next[idx] = { ...updated };
+      this.candidates = next;
+      this.notify();
+    }
+  }
+
+  public updatePersistenceStatus(
+    localId: string,
+    status: CandidatePersistenceStatus,
+    transactionId?: number,
+    error?: string
+  ) {
+    const idx = this.candidates.findIndex(c => c.localId === localId);
+    if (idx !== -1) {
+      const current = this.candidates[idx];
+      const next = [...this.candidates];
+      next[idx] = {
+        ...current,
+        persistenceStatus: status,
+        persistedTransactionId: transactionId ?? current.persistedTransactionId,
+        persistenceError: error ?? (status === 'PERSISTED' ? undefined : current.persistenceError),
+      };
+      this.candidates = next;
       this.notify();
     }
   }
@@ -55,31 +94,98 @@ class StatementCandidateStore {
     const idx = this.candidates.findIndex(c => c.localId === localId);
     if (idx !== -1) {
       const current = this.candidates[idx];
+
+      // Non-SENT candidates and duplicates are locked unless marked as reimbursement
+      const isPersistableDirection = current.direction === 'SENT' || (current.direction === 'RECEIVED' && current.isReimbursement);
+      if (!isPersistableDirection || current.duplicateInfo?.isDuplicate) {
+        return;
+      }
+
       const isExcl = current.reviewStatus === 'EXCLUDED' || current.isExcluded;
       const nextStatus = isExcl ? 'READY_FOR_REVIEW' : 'EXCLUDED';
-      this.candidates[idx] = {
+      const next = [...this.candidates];
+      next[idx] = {
         ...current,
         reviewStatus: nextStatus,
         isExcluded: !isExcl,
       };
+      this.candidates = next;
       this.notify();
     }
   }
 
   public setAllInclusion(include: boolean) {
-    this.candidates = this.candidates.map(c => ({
-      ...c,
-      reviewStatus: include ? 'READY_FOR_REVIEW' : 'EXCLUDED',
-      isExcluded: !include,
-    }));
+    this.candidates = this.candidates.map(c => {
+      // Duplicates must never be included
+      if (c.duplicateInfo?.isDuplicate) {
+        return {
+          ...c,
+          reviewStatus: 'DUPLICATE_WARNING',
+          isExcluded: true,
+        };
+      }
+
+      // Non-persistable candidates (ordinary RECEIVED and TOP_UP) remain visible non-spending items (not struck-through)
+      const isPersistableDirection = c.direction === 'SENT' || (c.direction === 'RECEIVED' && c.isReimbursement);
+      if (!isPersistableDirection) {
+        return {
+          ...c,
+          reviewStatus: c.reviewStatus || 'READY_FOR_REVIEW',
+          isExcluded: false,
+        };
+      }
+
+      return {
+        ...c,
+        reviewStatus: include ? 'READY_FOR_REVIEW' : 'EXCLUDED',
+        isExcluded: !include,
+      };
+    });
     this.notify();
   }
 
-  public clear() {
+  public getPersistableCandidates(): TransactionCandidate[] {
+    return this.candidates.filter(
+      c =>
+        !c.isExcluded &&
+        (c.direction === 'SENT' || (c.direction === 'RECEIVED' && c.isReimbursement)) &&
+        (c.amount ?? 0) > 0 &&
+        c.persistenceStatus !== 'PERSISTED' &&
+        c.persistenceStatus !== 'SKIPPED_DUPLICATE'
+    );
+  }
+
+  public prepareRetryFailed(): TransactionCandidate[] {
+    const failedCandidates: TransactionCandidate[] = [];
+    const next = this.candidates.map(c => {
+      if (c.persistenceStatus === 'FAILED') {
+        const resetCandidate: TransactionCandidate = {
+          ...c,
+          persistenceStatus: 'SUBMITTING' as CandidatePersistenceStatus,
+          persistenceError: undefined,
+        };
+        failedCandidates.push(resetCandidate);
+        return resetCandidate;
+      }
+      return c;
+    });
+
+    if (failedCandidates.length > 0) {
+      this.candidates = next;
+      this.notify();
+    }
+    return failedCandidates;
+  }
+
+  public clearSession() {
     this.candidates = [];
     this.metadata = undefined;
     this.warnings = [];
     this.notify();
+  }
+
+  public clear() {
+    this.clearSession();
   }
 
   public subscribe(listener: () => void): () => void {
@@ -95,3 +201,4 @@ class StatementCandidateStore {
 }
 
 export const statementCandidateStore = new StatementCandidateStore();
+

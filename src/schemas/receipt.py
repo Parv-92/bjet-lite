@@ -35,4 +35,5 @@ class ReceiptConfirmRequest(BaseModel):
     timestamp: datetime = Field(..., description="Confirmed transaction date/time")
     merchant_name: Optional[str] = Field(None, description="Confirmed or edited merchant name")
     notes: Optional[str] = Field(None, max_length=500, description="Optional user notes")
+    is_reimbursement: Optional[bool] = Field(False, description="Whether this payment reduces category spending")
 

@@ -46,6 +46,8 @@ export function useUpdateCategory() {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       // Invalidate budgets so updated category metadata displays correctly
       queryClient.invalidateQueries({ queryKey: ['budgets', 'summary'] });
+      // Invalidate rules so rule cards reflect updated category name/icon/color
+      queryClient.invalidateQueries({ queryKey: ['rules'] });
     },
   });
 }
@@ -53,7 +55,7 @@ export function useUpdateCategory() {
 /**
  * Mutation hook to delete a user-owned custom category.
  * If deletion is blocked because the category is referenced, the backend error is preserved.
- * Invalidates ['categories'] and ['budgets', 'summary'], and removes stale detail cache.
+ * Invalidates ['categories'], ['budgets', 'summary'], ['rules'], and removes stale detail cache.
  */
 export function useDeleteCategory() {
   const queryClient = useQueryClient();
@@ -67,6 +69,8 @@ export function useDeleteCategory() {
       queryClient.removeQueries({ queryKey: ['categories', id] });
       // Invalidate budget queries
       queryClient.invalidateQueries({ queryKey: ['budgets', 'summary'] });
+      // Invalidate rules defensively
+      queryClient.invalidateQueries({ queryKey: ['rules'] });
     },
   });
 }

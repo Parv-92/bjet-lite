@@ -35,6 +35,7 @@ import {
   ArrowDownLeft,
   RefreshCw,
   Trash2,
+  ShieldCheck,
 } from 'lucide-react-native';
 import { TransactionCandidate, CandidateDirection } from '../../types/receiptInterpretation';
 import { CategoryPickerModal } from '../transactions/CategoryPickerModal';
@@ -63,6 +64,9 @@ export const CandidateEditModal: React.FC<CandidateEditModalProps> = ({
   const [categoryName, setCategoryName] = useState<string | null | undefined>(null);
   const [notes, setNotes] = useState('');
   const [isExcluded, setIsExcluded] = useState(false);
+  const [isReimbursement, setIsReimbursement] = useState(false);
+  const [friendName, setFriendName] = useState<string | null>(null);
+  const [friendId, setFriendId] = useState<number | null>(null);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
 
   useEffect(() => {
@@ -74,10 +78,13 @@ export const CandidateEditModal: React.FC<CandidateEditModalProps> = ({
         candidate.amount !== undefined ? candidate.amount.toString() : ''
       );
       setDirection(candidate.direction || 'SENT');
-      setCategoryId(candidate.suggestedCategoryId);
+      setCategoryId(candidate.selectedCategoryId ?? candidate.suggestedCategoryId);
       setCategoryName(candidate.suggestedCategoryName);
       setNotes(candidate.notes || '');
       setIsExcluded(candidate.reviewStatus === 'EXCLUDED');
+      setIsReimbursement(!!candidate.isReimbursement);
+      setFriendName(candidate.friendName || null);
+      setFriendId(candidate.friendId || null);
     }
   }, [candidate, visible]);
 
@@ -102,7 +109,11 @@ export const CandidateEditModal: React.FC<CandidateEditModalProps> = ({
       direction,
       suggestedCategoryId: categoryId,
       suggestedCategoryName: categoryName,
+      selectedCategoryId: categoryId,
       notes: notes.trim() || undefined,
+      isReimbursement: direction === 'RECEIVED' ? isReimbursement : false,
+      friendId: direction === 'RECEIVED' ? friendId : null,
+      friendName: direction === 'RECEIVED' ? friendName : null,
       reviewStatus: isExcluded ? 'EXCLUDED' : 'EDITED',
     };
 
@@ -245,20 +256,60 @@ export const CandidateEditModal: React.FC<CandidateEditModalProps> = ({
               </View>
             </View>
 
-            {/* Advisory Category Selection */}
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Advisory Category</Text>
-              <TouchableOpacity
-                style={styles.categorySelector}
-                onPress={() => setShowCategoryPicker(true)}
-              >
-                <Tag color={colors.brandLight} size={18} />
-                <Text style={styles.categorySelectorText}>
-                  {categoryName ? categoryName : 'Select Category (Optional)'}
+            {/* Reimbursement Toggle for RECEIVED transactions */}
+            {direction === 'RECEIVED' && (
+              <View style={styles.formGroup}>
+                <TouchableOpacity
+                  style={[
+                    styles.reimbursementToggle,
+                    isReimbursement && styles.reimbursementToggleActive,
+                  ]}
+                  onPress={() => setIsReimbursement(prev => !prev)}
+                >
+                  <View style={[styles.checkbox, isReimbursement && styles.checkboxActive]}>
+                    {isReimbursement && <Check color={colors.background} size={14} strokeWidth={3} />}
+                  </View>
+                  <View style={styles.reimbursementTextContainer}>
+                    <Text style={styles.reimbursementTitle}>
+                      Mark as Reimbursement
+                      {friendName ? ` (from ${friendName})` : ''}
+                    </Text>
+                    <Text style={styles.reimbursementSubtitle}>
+                      Offsets personal spending in the selected category
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Advisory Category Selection (for expenses and reimbursements) */}
+            {(direction === 'SENT' || (direction === 'RECEIVED' && isReimbursement)) && (
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>
+                  {direction === 'RECEIVED' ? 'Offset Category' : 'Advisory Category'}
                 </Text>
-                <Text style={styles.categorySelectorSub}>Change</Text>
-              </TouchableOpacity>
-            </View>
+                <TouchableOpacity
+                  style={styles.categorySelector}
+                  onPress={() => setShowCategoryPicker(true)}
+                >
+                  <Tag color={colors.brandLight} size={18} />
+                  <Text style={styles.categorySelectorText}>
+                    {categoryName ? categoryName : 'Select Category'}
+                  </Text>
+                  <Text style={styles.categorySelectorSub}>Change</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* TOP_UP Notice */}
+            {direction === 'TOP_UP' && (
+              <View style={styles.topUpNotice}>
+                <RefreshCw color={colors.info} size={16} />
+                <Text style={styles.topUpNoticeText}>
+                  UPI Lite top-ups are internal wallet transfers, not expenses. They contribute ₹0 to spending and have no category.
+                </Text>
+              </View>
+            )}
 
             {/* Notes */}
             <View style={styles.formGroup}>
@@ -508,5 +559,61 @@ const styles = StyleSheet.create({
   },
   footerButton: {
     width: '100%',
+  },
+  reimbursementToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: radii.md,
+    padding: spacing.md,
+  },
+  reimbursementToggleActive: {
+    backgroundColor: 'rgba(16, 185, 129, 0.08)',
+    borderColor: 'rgba(16, 185, 129, 0.4)',
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: radii.sm,
+    borderWidth: 2,
+    borderColor: colors.textMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxActive: {
+    backgroundColor: colors.success,
+    borderColor: colors.success,
+  },
+  reimbursementTextContainer: {
+    flex: 1,
+  },
+  reimbursementTitle: {
+    fontSize: fontSizes.sm,
+    fontWeight: fontWeights.semibold,
+    color: colors.text,
+  },
+  reimbursementSubtitle: {
+    fontSize: fontSizes.xs,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  topUpNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: 'rgba(59, 130, 246, 0.08)',
+    borderColor: 'rgba(59, 130, 246, 0.25)',
+    borderWidth: 1,
+    borderRadius: radii.md,
+    padding: spacing.md,
+  },
+  topUpNoticeText: {
+    flex: 1,
+    color: colors.info,
+    fontSize: fontSizes.xs,
+    lineHeight: 18,
   },
 });

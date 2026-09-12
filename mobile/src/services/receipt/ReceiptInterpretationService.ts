@@ -64,7 +64,10 @@ export class ReceiptInterpretationService {
     }
 
     // Execute Document Parsing
+    const parseT0 = Date.now();
     const parsed = await selectedParser.parse(rawText, { pageCount });
+    const parseT1 = Date.now();
+    const parseDur = parseT1 - parseT0;
 
     // Combine extraction warnings with parser warnings
     const combinedWarnings = [
@@ -73,9 +76,17 @@ export class ReceiptInterpretationService {
     ];
 
     // Enrich candidates with duplicates and advisory category suggestions
+    const enrichT0 = Date.now();
     const enrichedCandidates: TransactionCandidate[] = CandidateBuilder.enrich(
       parsed.candidates,
       context
+    );
+    const enrichT1 = Date.now();
+    const enrichDur = enrichT1 - enrichT0;
+
+    // [DIAGNOSTIC INSTRUMENTATION - TEMPORARY] Log parser and candidate generation performance
+    console.log(
+      `[PERF][OCR]\nParser: ${selectedParser.constructor.name}\nParser Duration: ${parseDur} ms\nRaw Text Length: ${rawText.length} chars\nRaw Candidates: ${parsed.candidates.length}\nEnrichment Duration: ${enrichDur} ms\nEnriched Candidates: ${enrichedCandidates.length}`
     );
 
     return {

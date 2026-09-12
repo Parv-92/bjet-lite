@@ -37,6 +37,7 @@ import {
   Calendar,
   AlertCircle,
   FileCheck,
+  Check,
 } from 'lucide-react-native';
 import { ScreenContainer } from '../../src/components/common/ScreenContainer';
 import { Card } from '../../src/components/ui/Card';
@@ -68,6 +69,7 @@ export default function ReceiptReviewScreen() {
   const [selectedCategoryName, setSelectedCategoryName] = useState<string | null>(null);
   const [timestamp, setTimestamp] = useState('');
   const [notes, setNotes] = useState('');
+  const [isReimbursement, setIsReimbursement] = useState(false);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isConfirmedSuccess, setIsConfirmedSuccess] = useState(false);
@@ -81,6 +83,7 @@ export default function ReceiptReviewScreen() {
         setSelectedCategoryName(tx.category.name);
       }
       setTimestamp(tx.timestamp || new Date().toISOString());
+      setIsReimbursement(Boolean(tx.is_reimbursement));
     }
   }, [tx]);
 
@@ -119,6 +122,7 @@ export default function ReceiptReviewScreen() {
           timestamp: timestamp || new Date().toISOString(),
           merchant_name: merchantName.trim() || undefined,
           notes: notes.trim() || undefined,
+          is_reimbursement: isReimbursement,
         },
       });
 
@@ -290,6 +294,27 @@ export default function ReceiptReviewScreen() {
               <Text style={styles.changeCategoryText}>Select</Text>
             </TouchableOpacity>
           </View>
+
+          {/* Category Reimbursement Toggle */}
+          <TouchableOpacity
+            style={styles.reimbursementToggleRow}
+            onPress={() => setIsReimbursement(!isReimbursement)}
+            activeOpacity={0.7}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: isReimbursement }}
+          >
+            <View style={[styles.checkbox, isReimbursement && styles.checkboxActive]}>
+              {isReimbursement && <Check color={colors.background} size={14} strokeWidth={3} />}
+            </View>
+            <View style={styles.reimbursementToggleTextContainer}>
+              <Text style={styles.reimbursementToggleTitle}>
+                This payment reduces my spending (Reimbursement)
+              </Text>
+              <Text style={styles.reimbursementToggleSubtitle}>
+                Offsets your {selectedCategoryName || 'selected category'} expenditure
+              </Text>
+            </View>
+          </TouchableOpacity>
 
           {/* Timestamp Field */}
           <View style={styles.formGroup}>
@@ -555,5 +580,43 @@ const styles = StyleSheet.create({
   successActions: {
     width: '100%',
     gap: spacing.sm,
+  },
+  reimbursementToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.sm,
+    backgroundColor: 'rgba(16, 185, 129, 0.08)',
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.25)',
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxActive: {
+    backgroundColor: colors.brand,
+    borderColor: colors.brand,
+  },
+  reimbursementToggleTextContainer: {
+    flex: 1,
+  },
+  reimbursementToggleTitle: {
+    color: colors.text,
+    fontSize: fontSizes.sm,
+    fontWeight: fontWeights.semiBold,
+  },
+  reimbursementToggleSubtitle: {
+    color: colors.brandLight,
+    fontSize: fontSizes.xs,
+    marginTop: 2,
   },
 });

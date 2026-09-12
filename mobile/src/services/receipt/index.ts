@@ -7,6 +7,7 @@ export * from './ReceiptExtractionService';
 export * from './ReceiptInterpretationService';
 export * from './CandidateBuilder';
 export * from './statementCandidateStore';
+export * from './StatementTransactionPersistenceService';
 export * from './parsers/types';
 export * from './parsers/GooglePayStatementParser';
 export * from './parsers/IndividualReceiptParser';

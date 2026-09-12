@@ -86,10 +86,23 @@ export class PdfOCRExtractor implements ReceiptTextExtractor {
         pageCount = pdfDoc.numPages || 0;
       } catch (err: any) {
         throw new Error(`Failed to parse PDF for OCR: ${err?.message || 'Unsupported PDF structure'}`);
+      } finally {
+        try {
+          if (pdfDoc && typeof pdfDoc.destroy === 'function') {
+            await pdfDoc.destroy();
+          }
+        } catch {}
+        try {
+          if (loadingTask && typeof loadingTask.destroy === 'function') {
+            await loadingTask.destroy();
+          }
+        } catch {}
       }
     }
 
     let fullRawText = '';
+    let totalRenderDuration = 0;
+    let totalOcrDuration = 0;
 
     // 2. Process pages sequentially to maintain controlled memory usage
     for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
@@ -108,7 +121,11 @@ export class PdfOCRExtractor implements ReceiptTextExtractor {
           message: `Rendering page ${pageNum} of ${pageCount}...`,
         });
 
+        const renderT0 = Date.now();
         renderedPage = await this.pageRenderer.renderPage(file.uri, pageNum);
+        const renderT1 = Date.now();
+        const renderDur = renderT1 - renderT0;
+        totalRenderDuration += renderDur;
 
         if (cancellationToken?.aborted) {
           throw new Error('Extraction cancelled by user.');
@@ -122,9 +139,18 @@ export class PdfOCRExtractor implements ReceiptTextExtractor {
           message: `Performing OCR on page ${pageNum} of ${pageCount}...`,
         });
 
+        const ocrT0 = Date.now();
         const ocrResult = await this.ocrProvider.recognizeText(
           renderedPage.imageUri,
           cancellationToken
+        );
+        const ocrT1 = Date.now();
+        const ocrDur = ocrT1 - ocrT0;
+        totalOcrDuration += ocrDur;
+
+        // [DIAGNOSTIC INSTRUMENTATION - TEMPORARY] Log per-page performance
+        console.log(
+          `[PERF][OCR]\nPage: ${pageNum}/${pageCount}\nRender Duration: ${renderDur} ms\nOCR Duration: ${ocrDur} ms\nText Length: ${ocrResult.text?.length ?? 0} chars`
         );
 
         if (ocrResult.warnings && ocrResult.warnings.length > 0) {
@@ -157,6 +183,11 @@ export class PdfOCRExtractor implements ReceiptTextExtractor {
         }
       }
     }
+
+    const totalPipelineDuration = Date.now() - startTime;
+    console.log(
+      `[PERF][OCR]\nPDF pages: ${pageCount}\nPdfRenderer Duration: ${totalRenderDuration} ms\nOCR Duration: ${totalOcrDuration} ms\nTotal Extraction Duration: ${totalPipelineDuration} ms\nCharacters extracted: ${fullRawText.length}`
+    );
 
     if (cancellationToken?.aborted) {
       throw new Error('Extraction cancelled by user.');

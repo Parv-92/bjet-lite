@@ -5,7 +5,7 @@ from src.core.exceptions import NotFoundError
 from src.models.budget import Budget
 from src.repositories.budget_repo import budget_repo
 from src.repositories.category_repo import category_repo
-from src.schemas.budget import BudgetCreate, BudgetSummary
+from src.schemas.budget import BudgetCreate, BudgetSummary, MonthlySpendingBreakdown
 
 
 class BudgetService:
@@ -32,6 +32,12 @@ class BudgetService:
             return None
         return budget_repo.get_budget_summary(db, budget)
 
+    def get_monthly_spending_breakdown(
+        self, db: Session, user_id: int, month: int, year: int
+    ) -> MonthlySpendingBreakdown:
+        return budget_repo.get_monthly_spending_breakdown(db, user_id, month, year)
+
 
 budget_service = BudgetService()
+
 

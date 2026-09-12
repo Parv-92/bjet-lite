@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 import enum
-from sqlalchemy import Column, Integer, String, Numeric, DateTime, ForeignKey, Text, Enum
+from sqlalchemy import Column, Integer, String, Numeric, DateTime, ForeignKey, Text, Enum, Boolean
 from sqlalchemy.orm import relationship
 
 from src.core.database import Base
@@ -47,10 +47,16 @@ class Transaction(Base, TimestampMixin):
     raw_extracted_text = Column(Text, nullable=True)
     receipt_image_path = Column(String(500), nullable=True)
 
+    direction = Column(String(20), default="SENT", nullable=False)
+    is_reimbursement = Column(Boolean, default=False, nullable=False)
+    friend_id = Column(Integer, ForeignKey("friends.id", ondelete="SET NULL"), nullable=True)
+    amount_paid_for_someone_else = Column(Numeric(10, 2), nullable=True)
+
     # Relationships
     user = relationship("User", back_populates="transactions")
     merchant = relationship("Merchant", back_populates="transactions")
     category = relationship("Category", back_populates="transactions")
+    friend = relationship("Friend")
 
     @property
     def has_receipt(self) -> bool:

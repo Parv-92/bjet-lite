@@ -37,3 +37,20 @@ class BudgetSummary(BudgetResponse):
     remaining_amount: Decimal = Decimal("0.00")
     percentage_used: float = 0.0
     is_over_budget: bool = False
+
+
+class CategorySpendingItem(BaseModel):
+    category_id: Optional[int] = None
+    category_name: str
+    category_color: str
+    category_icon: Optional[str] = None
+    spent_amount: Decimal = Decimal("0.00")
+    percentage: float = 0.0
+
+
+class MonthlySpendingBreakdown(BaseModel):
+    month: int
+    year: int
+    total_spent: Decimal = Decimal("0.00")
+    items: list[CategorySpendingItem] = []
+

@@ -26,6 +26,13 @@ export type ReviewStatus =
   | 'FAILED'
   | 'EDITED';
 
+export type CandidatePersistenceStatus =
+  | 'NOT_SUBMITTED'
+  | 'SUBMITTING'
+  | 'PERSISTED'
+  | 'SKIPPED_DUPLICATE'
+  | 'FAILED';
+
 export interface DuplicateIndicator {
   isDuplicate: boolean;
   existingTransactionId?: number;
@@ -58,6 +65,12 @@ export interface TransactionCandidate {
   notes?: string;
   backendTransactionId?: number; // Present if already created as a backend draft
   duplicateInfo?: DuplicateIndicator;
+  persistenceStatus?: CandidatePersistenceStatus;
+  persistedTransactionId?: number;
+  persistenceError?: string;
+  isReimbursement?: boolean;
+  friendId?: number | null;
+  friendName?: string | null;
 }
 
 export interface StatementMetadata {
@@ -65,6 +78,7 @@ export interface StatementMetadata {
   periodEnd?: string;
   totalSentReported?: number;
   totalReceivedReported?: number;
+  totalTopUpReported?: number;
   accountIdentifier?: string;
 }
 

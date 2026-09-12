@@ -6,20 +6,45 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ArrowDownLeft, FileCheck, ChevronRight } from 'lucide-react-native';
+import {
+  ArrowDownLeft,
+  ArrowUpRight,
+  FileCheck,
+  ChevronRight,
+  CheckSquare,
+  Square,
+} from 'lucide-react-native';
 import { Card } from '../ui/Card';
 import { TransactionStatusBadge } from './TransactionStatusBadge';
 import { TransactionListItemResponse } from '../../types/api';
 import { colors } from '../../theme/colors';
-import { spacing } from '../../theme/spacing';
+import { spacing, radii } from '../../theme/spacing';
 import { fontSizes, fontWeights } from '../../theme/typography';
+// [DIAGNOSTIC INSTRUMENTATION - TEMPORARY]
+import { useRenderDiagnostic } from '../../utils/perfDiagnostic';
 
 interface TransactionCardProps {
   transaction: TransactionListItemResponse;
+  isSelectionMode?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: (id: number) => void;
 }
 
-export const TransactionCard: React.FC<TransactionCardProps> = ({ transaction }) => {
+export const TransactionCard: React.FC<TransactionCardProps> = ({
+  transaction,
+  isSelectionMode = false,
+  isSelected = false,
+  onToggleSelect,
+}) => {
   const router = useRouter();
+
+  // [DIAGNOSTIC INSTRUMENTATION - TEMPORARY] Sample first 2 transaction card renders
+  if (transaction.id <= 2) {
+    useRenderDiagnostic(`TransactionCard[#${transaction.id}]`, {
+      amount: transaction.amount,
+      status: transaction.status,
+    });
+  }
 
   const formatCurrency = (val: string | number) => {
     const num = typeof val === 'string' ? parseFloat(val) : val;
@@ -50,21 +75,58 @@ export const TransactionCard: React.FC<TransactionCardProps> = ({ transaction })
   const categoryName = transaction.category?.name || 'Uncategorized';
   const categoryColor = transaction.category?.color || colors.textMuted;
 
+  const isReimbursement = Boolean(transaction.is_reimbursement);
+  const isReceived = transaction.direction === 'RECEIVED';
+  const paidForOthers = parseFloat(transaction.amount_paid_for_someone_else || '0');
+  const totalAmount = parseFloat(transaction.amount || '0');
+  const netPersonalAmount = Math.max(0, totalAmount - paidForOthers);
+
   const handlePress = () => {
-    router.push(`/transaction/${transaction.id}` as any);
+    if (isSelectionMode) {
+      onToggleSelect?.(transaction.id);
+    } else {
+      router.push(`/transaction/${transaction.id}` as any);
+    }
   };
 
   return (
-    <TouchableOpacity activeOpacity={0.7} onPress={handlePress}>
-      <Card style={styles.card}>
+    <TouchableOpacity
+      activeOpacity={0.7}
+      onPress={handlePress}
+      accessibilityRole="button"
+      accessibilityLabel={`${merchantName}, ${formatCurrency(transaction.amount)}`}
+    >
+      <Card style={[styles.card, isSelected && styles.cardSelected]}>
+        {/* Selection Checkbox */}
+        {isSelectionMode && (
+          <View style={styles.selectionBox}>
+            {isSelected ? (
+              <CheckSquare size={20} color={colors.brand} />
+            ) : (
+              <Square size={20} color={colors.textMuted} />
+            )}
+          </View>
+        )}
+
         <View style={styles.leftContent}>
           <View
             style={[
               styles.categoryCircle,
-              { backgroundColor: `${categoryColor}20` },
+              {
+                backgroundColor: isReimbursement
+                  ? 'rgba(16, 185, 129, 0.15)'
+                  : `${categoryColor}20`,
+              },
             ]}
           >
-            <ArrowDownLeft color={categoryColor} size={18} />
+            {isReceived ? (
+              <ArrowUpRight
+                color={isReimbursement ? colors.brandLight : categoryColor}
+                size={18}
+              />
+            ) : (
+              <ArrowDownLeft color={categoryColor} size={18} />
+            )}
           </View>
 
           <View style={styles.details}>
@@ -75,15 +137,27 @@ export const TransactionCard: React.FC<TransactionCardProps> = ({ transaction })
             </View>
 
             <View style={styles.metaRow}>
-              <Text style={[styles.categoryBadge, { color: categoryColor }]} numberOfLines={1}>
+              <Text
+                style={[styles.categoryBadge, { color: categoryColor }]}
+                numberOfLines={1}
+              >
                 {categoryName}
               </Text>
+              {transaction.friend?.name && (
+                <Text style={styles.friendBadge} numberOfLines={1}>
+                  ({transaction.friend.name})
+                </Text>
+              )}
               <Text style={styles.dot}>•</Text>
               <Text style={styles.dateText}>{formatDate(transaction.timestamp)}</Text>
               {transaction.has_receipt && (
                 <>
                   <Text style={styles.dot}>•</Text>
-                  <FileCheck color={colors.brandLight} size={12} style={styles.receiptIcon} />
+                  <FileCheck
+                    color={colors.brandLight}
+                    size={12}
+                    style={styles.receiptIcon}
+                  />
                 </>
               )}
             </View>
@@ -91,10 +165,38 @@ export const TransactionCard: React.FC<TransactionCardProps> = ({ transaction })
         </View>
 
         <View style={styles.rightContent}>
-          <Text style={styles.amountText}>{formatCurrency(transaction.amount)}</Text>
+          <Text
+            style={[
+              styles.amountText,
+              isReceived && styles.amountTextReceived,
+              isReimbursement && styles.amountTextReimbursement,
+            ]}
+          >
+            {isReceived ? '+' : '-'}
+            {formatCurrency(transaction.amount)}
+          </Text>
+
+          {isReimbursement && (
+            <View style={styles.reimbursementPill}>
+              <Text style={styles.reimbursementPillText}>Reimbursement</Text>
+            </View>
+          )}
+
+          {paidForOthers > 0 && (
+            <Text style={styles.netShareText}>
+              Net: {formatCurrency(netPersonalAmount)}
+            </Text>
+          )}
+
           <View style={styles.statusRow}>
             <TransactionStatusBadge status={transaction.status} size="sm" />
-            <ChevronRight color={colors.textMuted} size={14} style={styles.chevron} />
+            {!isSelectionMode && (
+              <ChevronRight
+                color={colors.textMuted}
+                size={14}
+                style={styles.chevron}
+              />
+            )}
           </View>
         </View>
       </Card>
@@ -111,6 +213,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  cardSelected: {
+    borderColor: colors.brand,
+    backgroundColor: 'rgba(16, 185, 129, 0.05)',
+  },
+  selectionBox: {
+    marginRight: spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   leftContent: {
     flexDirection: 'row',
@@ -149,6 +260,13 @@ const styles = StyleSheet.create({
     fontWeight: fontWeights.medium,
     maxWidth: 100,
   },
+  friendBadge: {
+    color: colors.brandLight,
+    fontSize: fontSizes.xs,
+    fontWeight: fontWeights.medium,
+    marginLeft: 2,
+    maxWidth: 80,
+  },
   dot: {
     color: colors.textMuted,
     marginHorizontal: 4,
@@ -170,6 +288,30 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.base,
     fontWeight: fontWeights.bold,
     marginBottom: 4,
+  },
+  amountTextReceived: {
+    color: colors.brandLight,
+  },
+  amountTextReimbursement: {
+    color: colors.brandLight,
+  },
+  reimbursementPill: {
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: radii.full,
+    marginBottom: 2,
+  },
+  reimbursementPillText: {
+    color: colors.brandLight,
+    fontSize: 10,
+    fontWeight: fontWeights.bold,
+  },
+  netShareText: {
+    color: colors.textSecondary,
+    fontSize: 10,
+    fontWeight: fontWeights.medium,
+    marginBottom: 2,
   },
   statusRow: {
     flexDirection: 'row',

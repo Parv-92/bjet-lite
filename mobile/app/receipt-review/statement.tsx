@@ -16,25 +16,28 @@
  * 4. Zero backend or frontend modifications.
  */
 
-import React, { useState, useEffect, useMemo, useSyncExternalStore } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useSyncExternalStore } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  FlatList,
   Alert,
   Modal,
-  SafeAreaView,
+  ActivityIndicator,
+  BackHandler,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { FlashList } from '@shopify/flash-list';
 import { useRouter } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
-  CheckCircle,
+  CheckCircle2,
   FileSpreadsheet,
   AlertCircle,
-  Info,
-  Layers,
+  AlertTriangle,
+  CreditCard,
   ArrowRight,
 } from 'lucide-react-native';
 import { ScreenContainer } from '../../src/components/common/ScreenContainer';
@@ -47,13 +50,22 @@ import {
 import { Button } from '../../src/components/ui/Button';
 import { Card } from '../../src/components/ui/Card';
 import { statementCandidateStore } from '../../src/services/receipt/statementCandidateStore';
+import {
+  statementTransactionPersistenceService,
+  StatementPersistenceProgress,
+  StatementPersistenceResult,
+} from '../../src/services/receipt/StatementTransactionPersistenceService';
 import { TransactionCandidate } from '../../src/types/receiptInterpretation';
 import { colors } from '../../src/theme/colors';
 import { spacing, radii } from '../../src/theme/spacing';
 import { fontSizes, fontWeights } from '../../src/theme/typography';
+// [DIAGNOSTIC INSTRUMENTATION - TEMPORARY]
+import { useRenderDiagnostic } from '../../src/utils/perfDiagnostic';
 
 export default function StatementReviewScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const insets = useSafeAreaInsets();
 
   // Subscribe to reactive updates from statementCandidateStore
   const candidates = useSyncExternalStore(
@@ -64,7 +76,60 @@ export default function StatementReviewScreen() {
 
   const [activeFilter, setActiveFilter] = useState<FilterCategory>('ALL');
   const [editingCandidate, setEditingCandidate] = useState<TransactionCandidate | null>(null);
-  const [showSummaryModal, setShowSummaryModal] = useState(false);
+
+  // Persistence workflow states
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [isPersisting, setIsPersisting] = useState(false);
+  const [persistenceProgress, setPersistenceProgress] = useState<StatementPersistenceProgress | null>(null);
+  const [persistenceResult, setPersistenceResult] = useState<StatementPersistenceResult | null>(null);
+
+  // [DIAGNOSTIC INSTRUMENTATION - TEMPORARY]
+  useRenderDiagnostic('StatementReviewScreen', {
+    activeFilter,
+    candidateCount: candidates.length,
+    isEditing: !!editingCandidate,
+    isPersisting,
+    hasResult: !!persistenceResult,
+  });
+
+  // Block hardware back button on Android while persistence is actively executing
+  useEffect(() => {
+    if (!isPersisting) return;
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      return true; // Consume event, prevent back navigation
+    });
+    return () => backHandler.remove();
+  }, [isPersisting]);
+
+  // Persistable candidates (SENT or RECEIVED reimbursement, not excluded, amount > 0, not yet persisted)
+  const persistableCandidates = useMemo(
+    () => statementCandidateStore.getPersistableCandidates(),
+    [candidates]
+  );
+  const persistableCount = persistableCandidates.length;
+
+  const { persistableExpensesCount, persistableReimbursementsCount, persistableNetSpending } = useMemo(() => {
+    let expCount = 0;
+    let reimbCount = 0;
+    let netSpending = 0;
+
+    for (const c of persistableCandidates) {
+      const amt = c.amount || 0;
+      if (c.direction === 'RECEIVED' && c.isReimbursement) {
+        reimbCount++;
+        netSpending -= amt;
+      } else {
+        expCount++;
+        netSpending += amt;
+      }
+    }
+
+    return {
+      persistableExpensesCount: expCount,
+      persistableReimbursementsCount: reimbCount,
+      persistableNetSpending: Math.max(0, netSpending),
+    };
+  }, [persistableCandidates]);
 
   // Totals and metrics
   const {
@@ -74,6 +139,8 @@ export default function StatementReviewScreen() {
     duplicateCount,
     includedCount,
     excludedCount,
+    receivedCount,
+    topUpCount,
   } = useMemo(() => {
     let sent = 0;
     let received = 0;
@@ -81,10 +148,15 @@ export default function StatementReviewScreen() {
     let dupes = 0;
     let inc = 0;
     let exc = 0;
+    let recvCnt = 0;
+    let topUpCnt = 0;
 
     for (const c of candidates) {
-      if (c.isDuplicate) dupes++;
-      if (c.reviewStatus === 'EXCLUDED') {
+      if (c.isDuplicate || c.duplicateInfo?.isDuplicate) dupes++;
+      if (c.direction === 'RECEIVED') recvCnt++;
+      if (c.direction === 'TOP_UP') topUpCnt++;
+
+      if (c.reviewStatus === 'EXCLUDED' || c.isExcluded) {
         exc++;
       } else {
         inc++;
@@ -103,6 +175,8 @@ export default function StatementReviewScreen() {
       duplicateCount: dupes,
       includedCount: inc,
       excludedCount: exc,
+      receivedCount: recvCnt,
+      topUpCount: topUpCnt,
     };
   }, [candidates]);
 
@@ -117,7 +191,7 @@ export default function StatementReviewScreen() {
         case 'TOP_UP':
           return c.direction === 'TOP_UP';
         case 'DUPLICATES':
-          return c.isDuplicate;
+          return c.isDuplicate || c.duplicateInfo?.isDuplicate;
         case 'ALL':
         default:
           return true;
@@ -125,34 +199,115 @@ export default function StatementReviewScreen() {
     });
   }, [candidates, activeFilter]);
 
-  const handleBack = () => {
+  const handleBack = useCallback(() => {
+    if (isPersisting) return;
     router.back();
-  };
+  }, [isPersisting, router]);
 
-  const handleToggleInclusion = (localId: string) => {
+  const handleToggleInclusion = useCallback((localId: string) => {
     statementCandidateStore.toggleInclusion(localId);
-  };
+  }, []);
 
-  const handleEdit = (candidate: TransactionCandidate) => {
+  const handleEdit = useCallback((candidate: TransactionCandidate) => {
     setEditingCandidate(candidate);
-  };
+  }, []);
 
-  const handleSaveEdit = (updated: TransactionCandidate) => {
+  const handleSaveEdit = useCallback((updated: TransactionCandidate) => {
     statementCandidateStore.updateCandidate(updated.localId, updated);
-  };
+  }, []);
 
-  const handleSelectAll = () => {
+  const handleSelectAll = useCallback(() => {
     statementCandidateStore.setAllInclusion(true);
-  };
+  }, []);
 
-  const handleDeselectAll = () => {
+  const handleDeselectAll = useCallback(() => {
     statementCandidateStore.setAllInclusion(false);
-  };
+  }, []);
 
-  // Safeguard 1: Action is "Review Selection" / "Continue", NEVER "Confirm Transactions"
-  const handleReviewSelection = () => {
-    setShowSummaryModal(true);
-  };
+  // Open confirmation modal
+  const handleOpenConfirmModal = useCallback(() => {
+    if (persistableCount === 0 || isPersisting) return;
+    setShowConfirmModal(true);
+  }, [persistableCount, isPersisting]);
+
+  // Execute persistence workflow
+  const handleExecutePersistence = useCallback(async () => {
+    setShowConfirmModal(false);
+    setIsPersisting(true);
+
+    try {
+      const result = await statementTransactionPersistenceService.persistCandidates(
+        persistableCandidates,
+        progress => setPersistenceProgress(progress)
+      );
+
+      // Invalidate React Query caches so Transactions, Dashboard, and Budgets update immediately
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['budgets', 'summary'] });
+
+      setPersistenceResult(result);
+    } catch (err: any) {
+      Alert.alert('Persistence Error', err?.message || 'Failed to persist transactions.');
+    } finally {
+      setIsPersisting(false);
+      setPersistenceProgress(null);
+    }
+  }, [persistableCandidates, queryClient]);
+
+  // Retry failed transactions
+  const handleRetryFailed = useCallback(async () => {
+    const failedToRetry = statementCandidateStore.prepareRetryFailed();
+    if (failedToRetry.length === 0) return;
+
+    setPersistenceResult(null);
+    setIsPersisting(true);
+
+    try {
+      const result = await statementTransactionPersistenceService.persistCandidates(
+        failedToRetry,
+        progress => setPersistenceProgress(progress)
+      );
+
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['budgets', 'summary'] });
+
+      setPersistenceResult(result);
+    } catch (err: any) {
+      Alert.alert('Retry Error', err?.message || 'Failed to retry failed transactions.');
+    } finally {
+      setIsPersisting(false);
+      setPersistenceProgress(null);
+    }
+  }, [queryClient]);
+
+  // View transactions: keeps statement session intact and navigates to Transactions tab
+  const handleViewTransactions = useCallback(() => {
+    setPersistenceResult(null);
+    router.replace('/(tabs)/transactions' as any);
+  }, [router]);
+
+  // Done: explicitly exits and clears statement session
+  const handleDone = useCallback(() => {
+    setPersistenceResult(null);
+    statementCandidateStore.clearSession();
+    router.replace('/(tabs)/scan' as any);
+  }, [router]);
+
+  const renderCandidateItem = useCallback(
+    ({ item }: { item: TransactionCandidate }) => (
+      <CandidateCard
+        candidate={item}
+        onToggleInclusion={handleToggleInclusion}
+        onEdit={handleEdit}
+      />
+    ),
+    [handleToggleInclusion, handleEdit]
+  );
+
+  const candidateKeyExtractor = useCallback(
+    (item: TransactionCandidate) => item.localId,
+    []
+  );
 
   if (candidates.length === 0) {
     return (
@@ -180,7 +335,8 @@ export default function StatementReviewScreen() {
         <View style={styles.appBar}>
           <TouchableOpacity
             onPress={handleBack}
-            style={styles.backButton}
+            disabled={isPersisting}
+            style={[styles.backButton, isPersisting && styles.disabledOpacity]}
             accessibilityLabel="Go back"
           >
             <ArrowLeft color={colors.text} size={20} />
@@ -188,22 +344,17 @@ export default function StatementReviewScreen() {
           <View style={styles.appBarTitles}>
             <Text style={styles.appBarTitle}>Statement Review</Text>
             <Text style={styles.appBarSubtitle}>
-              {candidates.length} Local Candidates • Unconfirmed
+              {candidates.length} Candidates • {persistableCount} Persistable
             </Text>
           </View>
         </View>
 
-        {/* Candidate Virtualized FlatList */}
-        <FlatList
+        {/* Candidate Virtualized FlashList */}
+        <FlashList
           data={filteredCandidates}
-          keyExtractor={(item) => item.localId}
-          renderItem={({ item }) => (
-            <CandidateCard
-              candidate={item}
-              onToggleInclusion={handleToggleInclusion}
-              onEdit={handleEdit}
-            />
-          )}
+          keyExtractor={candidateKeyExtractor}
+          renderItem={renderCandidateItem}
+          estimatedItemSize={140}
           ListHeaderComponent={
             <StatementSummaryHeader
               metadata={metadata}
@@ -220,29 +371,32 @@ export default function StatementReviewScreen() {
               onDeselectAll={handleDeselectAll}
             />
           }
-          contentContainerStyle={styles.listContent}
-          initialNumToRender={15}
-          maxToRenderPerBatch={20}
-          windowSize={7}
-          removeClippedSubviews
+          contentContainerStyle={{
+            paddingHorizontal: spacing.lg,
+            paddingBottom: 120 + insets.bottom,
+          }}
         />
 
         {/* Floating Action Bar */}
-        <View style={styles.bottomBar}>
+        <View style={[styles.bottomBar, { paddingBottom: Math.max(spacing.md, insets.bottom + spacing.xs) }]}>
           <View style={styles.bottomBarInfo}>
             <Text style={styles.bottomBarCount}>
-              {includedCount} candidates selected
+              {persistableCount > 0
+                ? `${persistableCount} transactions ready`
+                : 'No transactions selected'}
             </Text>
             <Text style={styles.bottomBarSub}>
-              ₹{(totalSent + totalTopUp).toLocaleString('en-IN')} debits • ₹{totalReceived.toLocaleString('en-IN')} credits
+              ₹{persistableNetSpending.toLocaleString('en-IN', { minimumFractionDigits: 2 })} net spending
+              {persistableReimbursementsCount > 0 ? ` (${persistableReimbursementsCount} reimbursements)` : ''}
+              {` • ${receivedCount - persistableReimbursementsCount} inflows (₹0)`}
             </Text>
           </View>
 
-          {/* SAFEGUARD 1: Wording is strictly 'Review Selection' / 'Continue' */}
           <Button
-            title="Review Selection"
+            title={persistableCount > 0 ? `Add ${persistableCount} Transactions` : 'No Transactions'}
             icon={<ArrowRight color={colors.background} size={16} />}
-            onPress={handleReviewSelection}
+            onPress={handleOpenConfirmModal}
+            disabled={persistableCount === 0 || isPersisting}
             variant="primary"
             style={styles.reviewButton}
           />
@@ -256,57 +410,158 @@ export default function StatementReviewScreen() {
           onSave={handleSaveEdit}
         />
 
-        {/* Informational Summary Modal (Safeguard 1 & 3) */}
+        {/* 1. Rich Confirmation Modal Before Persistence */}
         <Modal
-          visible={showSummaryModal}
+          visible={showConfirmModal}
           transparent
           animationType="fade"
-          onRequestClose={() => setShowSummaryModal(false)}
+          onRequestClose={() => setShowConfirmModal(false)}
         >
           <View style={styles.modalBackdrop}>
-            <Card style={styles.summaryModalCard}>
-              <View style={styles.summaryModalIcon}>
-                <Layers color={colors.brandLight} size={36} />
+            <Card style={styles.confirmModalCard}>
+              <View style={styles.modalHeaderIcon}>
+                <CreditCard color={colors.brandLight} size={36} />
               </View>
-              <Text style={styles.summaryModalTitle}>Statement Selection Reviewed</Text>
-              <Text style={styles.summaryModalSubtitle}>
-                You have reviewed {includedCount} transaction candidates.
+              <Text style={styles.modalTitle}>Add {persistableCount} Transactions?</Text>
+              <Text style={styles.modalImpact}>
+                ₹{persistableNetSpending.toLocaleString('en-IN', { minimumFractionDigits: 2 })} net spending will be added to your budget.
               </Text>
 
-              <View style={styles.summaryModalStats}>
-                <View style={styles.summaryStatRow}>
-                  <Text style={styles.summaryStatLabel}>Selected Candidates</Text>
-                  <Text style={styles.summaryStatValue}>{includedCount} of {candidates.length}</Text>
+              <View style={styles.modalBreakdown}>
+                <View style={styles.breakdownRow}>
+                  <Text style={styles.breakdownLabel}>Expense transactions</Text>
+                  <Text style={styles.breakdownValue}>{persistableExpensesCount}</Text>
                 </View>
-                <View style={styles.summaryStatRow}>
-                  <Text style={styles.summaryStatLabel}>Total Outflow (Sent + Top-up)</Text>
-                  <Text style={styles.summaryStatValue}>
-                    ₹{(totalSent + totalTopUp).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                {persistableReimbursementsCount > 0 && (
+                  <View style={styles.breakdownRow}>
+                    <Text style={styles.breakdownLabel}>Reimbursements (offsets spending)</Text>
+                    <Text style={[styles.breakdownValue, { color: colors.success }]}>
+                      {persistableReimbursementsCount}
+                    </Text>
+                  </View>
+                )}
+                <View style={styles.breakdownRow}>
+                  <Text style={styles.breakdownLabel}>Non-spending inflows</Text>
+                  <Text style={[styles.breakdownValue, { color: colors.info }]}>
+                    {receivedCount - persistableReimbursementsCount}
                   </Text>
                 </View>
-                <View style={styles.summaryStatRow}>
-                  <Text style={styles.summaryStatLabel}>Total Inflow (Received)</Text>
-                  <Text style={[styles.summaryStatValue, { color: colors.success }]}>
-                    ₹{totalReceived.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                  </Text>
+                <View style={styles.breakdownRow}>
+                  <Text style={styles.breakdownLabel}>Wallet top-ups (internal transfers)</Text>
+                  <Text style={[styles.breakdownValue, { color: colors.info }]}>{topUpCount}</Text>
                 </View>
               </View>
 
-              <View style={styles.persistedNoticeBox}>
-                <Info color={colors.info} size={16} />
-                <Text style={styles.persistedNoticeText}>
-                  Notice: Statement import is not yet persisted to confirmed backend transactions.
-                  Candidates remain stored locally. Bulk persistence will be enabled in a future
-                  backend contract release.
+              <View style={styles.modalWarningBox}>
+                <AlertTriangle color={colors.warning} size={16} />
+                <Text style={styles.modalWarningText}>
+                  These transactions will immediately affect your monthly budgets.
                 </Text>
               </View>
 
-              <Button
-                title="Done"
-                onPress={() => setShowSummaryModal(false)}
-                variant="primary"
-                style={styles.modalDoneButton}
-              />
+              <View style={styles.modalActionsRow}>
+                <Button
+                  title="Cancel"
+                  variant="ghost"
+                  onPress={() => setShowConfirmModal(false)}
+                  style={styles.modalActionBtn}
+                />
+                <Button
+                  title="Add Transactions"
+                  variant="primary"
+                  onPress={handleExecutePersistence}
+                  style={styles.modalActionBtn}
+                />
+              </View>
+            </Card>
+          </View>
+        </Modal>
+
+        {/* 2. Live Persistence Progress Modal */}
+        <Modal
+          visible={isPersisting}
+          transparent
+          animationType="fade"
+          onRequestClose={() => {}} // Non-dismissable
+        >
+          <View style={styles.modalBackdrop}>
+            <Card style={styles.progressModalCard}>
+              <ActivityIndicator size="large" color={colors.brandLight} />
+              <Text style={styles.progressTitle}>Adding Transactions...</Text>
+              <Text style={styles.progressCounter}>
+                {persistenceProgress?.completed ?? 0} / {persistenceProgress?.total ?? persistableCount} completed
+              </Text>
+              <Text style={styles.progressSub}>
+                Controlled worker pool (max 3 concurrent requests). Please keep the app open.
+              </Text>
+            </Card>
+          </View>
+        </Modal>
+
+        {/* 3. Import Complete Modal (Clear Audit Trail) */}
+        <Modal
+          visible={persistenceResult !== null}
+          transparent
+          animationType="fade"
+          onRequestClose={() => {}}
+        >
+          <View style={styles.modalBackdrop}>
+            <Card style={styles.resultModalCard}>
+              <View style={styles.modalHeaderIcon}>
+                {persistenceResult?.failureCount === 0 ? (
+                  <CheckCircle2 color={colors.success} size={40} />
+                ) : (
+                  <AlertCircle color={colors.warning} size={40} />
+                )}
+              </View>
+
+              <Text style={styles.modalTitle}>Import Complete</Text>
+
+              <View style={styles.auditMetricsBox}>
+                <View style={styles.auditMetricRow}>
+                  <Text style={[styles.auditMetricText, { color: colors.success }]}>
+                    ✓ {persistenceResult?.successCount ?? 0} added successfully
+                  </Text>
+                </View>
+                <View style={styles.auditMetricRow}>
+                  <Text style={[styles.auditMetricText, { color: colors.warning }]}>
+                    ⊘ {persistenceResult?.skippedDuplicateCount ?? 0} duplicates skipped
+                  </Text>
+                </View>
+                <View style={styles.auditMetricRow}>
+                  <Text
+                    style={[
+                      styles.auditMetricText,
+                      { color: (persistenceResult?.failureCount ?? 0) > 0 ? colors.danger : colors.textMuted },
+                    ]}
+                  >
+                    ⚠ {persistenceResult?.failureCount ?? 0} failed
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.resultActions}>
+                {persistenceResult && persistenceResult.failureCount > 0 && (
+                  <Button
+                    title={`Retry Failed (${persistenceResult.failureCount})`}
+                    variant="outline"
+                    onPress={handleRetryFailed}
+                    style={styles.resultActionBtn}
+                  />
+                )}
+                <Button
+                  title="View Transactions"
+                  variant="primary"
+                  onPress={handleViewTransactions}
+                  style={styles.resultActionBtn}
+                />
+                <Button
+                  title="Done"
+                  variant="ghost"
+                  onPress={handleDone}
+                  style={styles.resultActionBtn}
+                />
+              </View>
             </Card>
           </View>
         </Modal>
@@ -405,6 +660,9 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginBottom: spacing.md,
   },
+  disabledOpacity: {
+    opacity: 0.5,
+  },
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(2, 6, 23, 0.85)',
@@ -412,7 +670,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: spacing.xl,
   },
-  summaryModalCard: {
+  confirmModalCard: {
     width: '100%',
     maxWidth: 400,
     backgroundColor: colors.surface,
@@ -420,7 +678,7 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
     alignItems: 'center',
   },
-  summaryModalIcon: {
+  modalHeaderIcon: {
     width: 68,
     height: 68,
     borderRadius: 34,
@@ -429,59 +687,123 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: spacing.md,
   },
-  summaryModalTitle: {
+  modalTitle: {
     color: colors.text,
     fontSize: fontSizes.lg,
     fontWeight: fontWeights.bold,
     textAlign: 'center',
     marginBottom: spacing.xs,
   },
-  summaryModalSubtitle: {
-    color: colors.textSecondary,
+  modalImpact: {
+    color: colors.brandLight,
     fontSize: fontSizes.sm,
+    fontWeight: fontWeights.semibold,
     textAlign: 'center',
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
   },
-  summaryModalStats: {
+  modalBreakdown: {
     width: '100%',
     backgroundColor: colors.surfaceElevated,
     borderRadius: radii.md,
     padding: spacing.md,
     gap: spacing.sm,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
   },
-  summaryStatRow: {
+  breakdownRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  summaryStatLabel: {
+  breakdownLabel: {
     color: colors.textSecondary,
     fontSize: fontSizes.xs,
   },
-  summaryStatValue: {
+  breakdownValue: {
     color: colors.text,
     fontSize: fontSizes.xs,
     fontWeight: fontWeights.bold,
   },
-  persistedNoticeBox: {
+  modalWarningBox: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.sm,
-    backgroundColor: 'rgba(59, 130, 246, 0.12)',
-    borderColor: 'rgba(59, 130, 246, 0.28)',
+    alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+    borderColor: 'rgba(245, 158, 11, 0.25)',
     borderWidth: 1,
     borderRadius: radii.md,
-    padding: spacing.md,
+    padding: spacing.sm,
     marginBottom: spacing.lg,
+    width: '100%',
   },
-  persistedNoticeText: {
-    flex: 1,
-    color: colors.info,
+  modalWarningText: {
+    color: colors.warning,
     fontSize: 11,
+    flex: 1,
+  },
+  modalActionsRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    width: '100%',
+  },
+  modalActionBtn: {
+    flex: 1,
+  },
+  progressModalCard: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    padding: spacing.xl,
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  progressTitle: {
+    color: colors.text,
+    fontSize: fontSizes.base,
+    fontWeight: fontWeights.bold,
+    textAlign: 'center',
+  },
+  progressCounter: {
+    color: colors.brandLight,
+    fontSize: fontSizes.sm,
+    fontWeight: fontWeights.semibold,
+  },
+  progressSub: {
+    color: colors.textMuted,
+    fontSize: 11,
+    textAlign: 'center',
     lineHeight: 16,
   },
-  modalDoneButton: {
+  resultModalCard: {
+    width: '100%',
+    maxWidth: 400,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    padding: spacing.xl,
+    alignItems: 'center',
+  },
+  auditMetricsBox: {
+    width: '100%',
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    gap: spacing.sm,
+    marginVertical: spacing.md,
+  },
+  auditMetricRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  auditMetricText: {
+    fontSize: fontSizes.sm,
+    fontWeight: fontWeights.medium,
+  },
+  resultActions: {
+    width: '100%',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  resultActionBtn: {
     width: '100%',
   },
 });

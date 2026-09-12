@@ -19,6 +19,8 @@ import { useDashboard } from '../../src/hooks/useDashboard';
 import { colors } from '../../src/theme/colors';
 import { spacing } from '../../src/theme/spacing';
 import { fontSizes, fontWeights } from '../../src/theme/typography';
+// [DIAGNOSTIC INSTRUMENTATION - TEMPORARY]
+import { useRenderDiagnostic } from '../../src/utils/perfDiagnostic';
 
 const MONTH_NAMES = [
   'January',
@@ -36,7 +38,7 @@ const MONTH_NAMES = [
 ];
 
 export default function HomeScreen() {
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const now = new Date();
   const currentMonth = now.getMonth() + 1;
   const currentYear = now.getFullYear();
@@ -53,10 +55,23 @@ export default function HomeScreen() {
     refetchAll,
   } = useDashboard(currentMonth, currentYear);
 
+  // [DIAGNOSTIC INSTRUMENTATION - TEMPORARY]
+  useRenderDiagnostic('DashboardScreen', {
+    isLoading,
+    isRefetching,
+    isError,
+    budgetCount: budgetSummary.length,
+    recentCount: recentTransactions.length,
+  });
+
   const monthName = MONTH_NAMES[currentMonth - 1];
 
   // User display name
   const displayName = user?.full_name || user?.email?.split('@')[0] || 'User';
+
+  if (!isAuthenticated) {
+    return null;
+  }
 
   if (isLoading && !isRefetching) {
     return (
@@ -64,6 +79,32 @@ export default function HomeScreen() {
         <View style={styles.centerContainer}>
           <LoadingSpinner size="large" label="Loading your financial dashboard..." />
         </View>
+      </ScreenContainer>
+    );
+  }
+
+  // If there's an error and no cached/loaded data, show explicit ErrorState without fake zeros
+  if (isError && !isRefetching && budgetSummary.length === 0 && recentTransactions.length === 0) {
+    return (
+      <ScreenContainer>
+        <View style={styles.header}>
+          <View style={styles.welcomeRow}>
+            <View style={styles.greetingContainer}>
+              <View style={styles.brandRow}>
+                <Sparkles color={colors.brand} size={14} />
+                <Text style={styles.brandTag}>BJET FINANCIAL</Text>
+              </View>
+              <Text style={styles.welcomeTitle} numberOfLines={1}>
+                Hello, {displayName}
+              </Text>
+            </View>
+          </View>
+        </View>
+        <ErrorMessage
+          message={errorMessage || 'Failed to load dashboard data. Please try again.'}
+          onRetry={refetchAll}
+          style={styles.errorBox}
+        />
       </ScreenContainer>
     );
   }
@@ -96,7 +137,7 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {/* Error state if query fails */}
+      {/* Error state banner if query fails during refetch with existing data */}
       {isError && (
         <ErrorMessage
           message={errorMessage || 'Failed to load dashboard data. Please try again.'}
@@ -105,18 +146,20 @@ export default function HomeScreen() {
         />
       )}
 
-      {/* Primary Financial Overview Metric Card */}
-      <MetricSummaryCard
-        totalSpent={metrics.totalSpent}
-        totalLimit={metrics.totalLimit}
-        totalRemaining={metrics.totalRemaining}
-        utilizationPercentage={metrics.utilizationPercentage}
-        overBudgetCount={metrics.overBudgetCount}
-        monthName={monthName}
-        year={currentYear}
-      />
+      {/* Primary Financial Overview Metric Card (only displayed when not in error or data present) */}
+      {(!isError || budgetSummary.length > 0) && (
+        <MetricSummaryCard
+          totalSpent={metrics.totalSpent}
+          totalLimit={metrics.totalLimit}
+          totalRemaining={metrics.totalRemaining}
+          utilizationPercentage={metrics.utilizationPercentage}
+          overBudgetCount={metrics.overBudgetCount}
+          monthName={monthName}
+          year={currentYear}
+        />
+      )}
 
-      {/* Pending Confirmations Section (Informational in Phase 3) */}
+      {/* Pending Confirmations Section */}
       <PendingConfirmationsSection transactions={pendingTransactions} />
 
       {/* Category Budget Breakdown Overview */}

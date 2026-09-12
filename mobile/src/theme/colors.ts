@@ -6,6 +6,7 @@ export const colors = {
   background: '#020617', // Slate 950
   surface: '#0f172a',    // Slate 900
   surfaceElevated: '#1e293b', // Slate 800
+  surfaceHover: '#1e293b',
   border: '#334155',     // Slate 700
   borderMuted: '#1e293b',
 

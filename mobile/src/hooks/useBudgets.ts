@@ -15,20 +15,45 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getBudgetSummaryApi,
   getCategoryBudgetStatusApi,
+  getMonthlySpendingBreakdownApi,
   setBudgetApi,
 } from '../api/budgets';
-import { Budget, BudgetSummary, SetBudgetRequest } from '../types/api';
+import { Budget, BudgetSummary, MonthlySpendingBreakdown, SetBudgetRequest } from '../types/api';
+import { useAuth } from './useAuth';
+
+/**
+ * Hook to retrieve monthly spending breakdown by category for the pie chart.
+ * Query Key: ['budgets', 'spending-breakdown', month, year]
+ */
+export function useMonthlySpendingBreakdown(
+  month: number,
+  year: number,
+  options?: { enabled?: boolean }
+) {
+  const { isAuthenticated } = useAuth();
+
+  return useQuery<MonthlySpendingBreakdown, Error>({
+    queryKey: ['budgets', 'spending-breakdown', month, year],
+    queryFn: () => getMonthlySpendingBreakdownApi(month, year),
+    staleTime: 60_000, // 60 seconds
+    retry: 1,
+    enabled: isAuthenticated && (options?.enabled ?? true),
+  });
+}
 
 /**
  * Hook to retrieve monthly budget summary for a given month and year.
  * Query Key: ['budgets', 'summary', month, year]
  */
-export function useBudgetSummary(month: number, year: number) {
+export function useBudgetSummary(month: number, year: number, options?: { enabled?: boolean }) {
+  const { isAuthenticated } = useAuth();
+
   return useQuery<BudgetSummary[], Error>({
     queryKey: ['budgets', 'summary', month, year],
     queryFn: () => getBudgetSummaryApi(month, year),
     staleTime: 60_000, // 60 seconds
     retry: 1,
+    enabled: isAuthenticated && (options?.enabled ?? true),
   });
 }
 
@@ -42,12 +67,14 @@ export function useCategoryBudgetStatus(
   year: number,
   enabled: boolean = true
 ) {
+  const { isAuthenticated } = useAuth();
+
   return useQuery<BudgetSummary, Error>({
     queryKey: ['budgets', categoryId, month, year],
     queryFn: () => getCategoryBudgetStatusApi(categoryId, month, year),
     staleTime: 60_000,
     retry: 1,
-    enabled: enabled && categoryId > 0,
+    enabled: isAuthenticated && enabled && categoryId > 0,
   });
 }
 

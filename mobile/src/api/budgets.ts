@@ -4,7 +4,7 @@
  * Paths have strictly NO trailing slashes.
  */
 import { apiClient } from './client';
-import { Budget, BudgetSummary, SetBudgetRequest } from '../types/api';
+import { Budget, BudgetSummary, MonthlySpendingBreakdown, SetBudgetRequest } from '../types/api';
 
 /**
  * Retrieve all category budget summaries for a given month and year.
@@ -12,6 +12,20 @@ import { Budget, BudgetSummary, SetBudgetRequest } from '../types/api';
  */
 export async function getBudgetSummaryApi(month: number, year: number): Promise<BudgetSummary[]> {
   const response = await apiClient.get<BudgetSummary[]>('/budgets/summary', {
+    params: { month, year },
+  });
+  return response.data;
+}
+
+/**
+ * Retrieve monthly spending breakdown by category for the pie chart.
+ * GET /api/v1/budgets/spending-breakdown?month={month}&year={year}
+ */
+export async function getMonthlySpendingBreakdownApi(
+  month: number,
+  year: number
+): Promise<MonthlySpendingBreakdown> {
+  const response = await apiClient.get<MonthlySpendingBreakdown>('/budgets/spending-breakdown', {
     params: { month, year },
   });
   return response.data;

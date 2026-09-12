@@ -15,7 +15,7 @@ import {
   TransactionCandidate,
   DuplicateIndicator,
 } from '../../types/receiptInterpretation';
-import { Transaction, Category, TransactionListItemResponse } from '../../types/api';
+import { Transaction, Category, TransactionListItemResponse, Friend } from '../../types/api';
 import { UserMerchantRule } from '../../types/rules';
 
 export interface EnrichmentContext {
@@ -23,11 +23,74 @@ export interface EnrichmentContext {
   userRules?: UserMerchantRule[];
   rules?: UserMerchantRule[];
   categories?: Category[];
+  friends?: Friend[];
+}
+
+/**
+ * Normalizes friend pattern deterministically: collapse whitespace, strip, uppercase.
+ * Exactly matches backend friend_repo.py normalize_friend_pattern().
+ */
+export function normalizeFriendPattern(text?: string | null): string {
+  if (!text) return '';
+  return text.replace(/\s+/g, ' ').trim().toUpperCase();
+}
+
+/**
+ * Finds user friend whose recognized_name matches or is contained in sender_text.
+ * Exactly reproduces backend friend_repo.py find_matching_friend() semantics.
+ */
+export function findMatchingFriend(
+  senderText?: string | null,
+  friends: Friend[] = []
+): Friend | undefined {
+  if (!senderText) return undefined;
+  const normSender = normalizeFriendPattern(senderText);
+  if (!normSender) return undefined;
+
+  // Never mistake bank credit lines for counterparty
+  if (normSender.startsWith('PAID TO BANK') || normSender.includes('BANK OF INDIA')) {
+    return undefined;
+  }
+
+  // Clean common transaction prefixes if present (e.g. "Received from Utsav" -> "UTSAV")
+  const cleanedSender = normSender.replace(/^(?:RECEIVED\s+FROM|FROM)\s+/i, '').trim();
+  if (!cleanedSender || cleanedSender.length < 2) {
+    return undefined;
+  }
+
+  // 1. Exact match first (against cleanedSender or normSender)
+  for (const friend of friends) {
+    const normPattern = normalizeFriendPattern(friend.recognized_name);
+    if (normPattern && (normPattern === cleanedSender || normPattern === normSender)) {
+      return friend;
+    }
+  }
+
+  // 2. Substring match (friend recognized_name inside sender_text or vice-versa)
+  for (const friend of friends) {
+    const normPattern = normalizeFriendPattern(friend.recognized_name);
+    if (normPattern && normPattern.length >= 2) {
+      if (
+        patIncludes(cleanedSender, normPattern) ||
+        patIncludes(normPattern, cleanedSender) ||
+        patIncludes(normSender, normPattern)
+      ) {
+        return friend;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function patIncludes(haystack: string, needle: string): boolean {
+  return haystack.includes(needle);
 }
 
 export class CandidateBuilder {
   /**
-   * Enriches raw parsed candidates with duplicate analysis and advisory category suggestions.
+   * Enriches raw parsed candidates with duplicate analysis, friend reimbursement
+   * recognition, and advisory category suggestions.
    */
   public static enrich(
     candidates: TransactionCandidate[],
@@ -36,12 +99,13 @@ export class CandidateBuilder {
     const existingTxs = context.existingTransactions || [];
     const userRules = context.userRules || context.rules || [];
     const categories = context.categories || [];
+    const friends = context.friends || [];
 
     // Map categories by ID for quick lookup
     const categoryMap = new Map<number, Category>();
     categories.forEach(c => categoryMap.set(c.id, c));
 
-    // Fallback uncategorized category
+    // Fallback uncategorized category (for outgoing SENT expenses only)
     const uncategorizedCat = categories.find(
       c => c.name.toLowerCase() === 'uncategorized'
     );
@@ -123,36 +187,80 @@ export class CandidateBuilder {
       }
 
       // -----------------------------------------------------------------
-      // 2. Advisory Category Suggestion (Strictly Advisory)
+      // 2. Friend & Reimbursement Recognition (for RECEIVED candidates)
+      // -----------------------------------------------------------------
+      let isReimbursement = candidate.isReimbursement ?? false;
+      let friendId: number | null = candidate.friendId ?? null;
+      let friendName: string | null = candidate.friendName ?? null;
+
+      if (candidate.direction === 'RECEIVED') {
+        const senderText = candidate.counterpartyName || candidate.merchantRawName;
+        const matchedFriend = findMatchingFriend(senderText, friends);
+        if (matchedFriend) {
+          isReimbursement = true;
+          friendId = matchedFriend.id;
+          friendName = matchedFriend.name;
+        } else {
+          isReimbursement = false;
+          friendId = null;
+          friendName = null;
+        }
+      } else {
+        isReimbursement = false;
+        friendId = null;
+        friendName = null;
+      }
+
+      // -----------------------------------------------------------------
+      // 3. Advisory Category Suggestion (Strictly Advisory)
       // -----------------------------------------------------------------
       let suggestedCategoryId: number | null = candidate.suggestedCategoryId || null;
       let suggestedCategoryName: string | null = candidate.suggestedCategoryName || null;
 
-      if (!suggestedCategoryId) {
-        const normMerchant = (candidate.merchantRawName || '').toUpperCase();
-        const normVpa = (candidate.upiVpa || '').toUpperCase();
+      if (candidate.direction === 'TOP_UP') {
+        // TOP_UP is an internal transfer, not an expenditure: do not assign fake merchant/category
+        suggestedCategoryId = null;
+        suggestedCategoryName = null;
+      } else if (candidate.direction === 'RECEIVED') {
+        if (isReimbursement && friendId) {
+          const matchedFriend = friends.find(f => f.id === friendId);
+          if (matchedFriend) {
+            suggestedCategoryId = matchedFriend.category_id;
+            suggestedCategoryName =
+              matchedFriend.category?.name || categoryMap.get(matchedFriend.category_id)?.name || null;
+          }
+        } else {
+          // Unrecognized RECEIVED is non-spending inflow: do not assign expense category
+          suggestedCategoryId = null;
+          suggestedCategoryName = null;
+        }
+      } else if (candidate.direction === 'SENT') {
+        if (!suggestedCategoryId) {
+          const normMerchant = (candidate.merchantRawName || '').toUpperCase();
+          const normVpa = (candidate.upiVpa || '').toUpperCase();
 
-        // Check user rules (already sorted priority DESC, created_at DESC by backend)
-        for (const rule of userRules) {
-          const pattern = (rule.merchant_pattern || '').trim().toUpperCase();
-          if (pattern) {
-            const isMatch =
-              (normMerchant && normMerchant.includes(pattern)) ||
-              (normVpa && normVpa.includes(pattern));
+          // Check user rules (already sorted priority DESC, created_at DESC by backend)
+          for (const rule of userRules) {
+            const pattern = (rule.merchant_pattern || '').trim().toUpperCase();
+            if (pattern) {
+              const isMatch =
+                (normMerchant && normMerchant.includes(pattern)) ||
+                (normVpa && normVpa.includes(pattern));
 
-            if (isMatch) {
-              suggestedCategoryId = rule.category_id;
-              suggestedCategoryName =
-                rule.category?.name || categoryMap.get(rule.category_id)?.name || null;
-              break;
+              if (isMatch) {
+                suggestedCategoryId = rule.category_id;
+                suggestedCategoryName =
+                  rule.category?.name || categoryMap.get(rule.category_id)?.name || null;
+                break;
+              }
             }
           }
-        }
 
-        // Fallback to Uncategorized if no rule matched
-        if (!suggestedCategoryId && uncategorizedCat) {
-          suggestedCategoryId = uncategorizedCat.id;
-          suggestedCategoryName = uncategorizedCat.name;
+          // Fallback to Uncategorized if no rule matched
+          if (!suggestedCategoryId && uncategorizedCat) {
+            suggestedCategoryId = uncategorizedCat.id;
+            suggestedCategoryName = uncategorizedCat.name;
+          }
         }
       }
 
@@ -164,6 +272,9 @@ export class CandidateBuilder {
 
       return {
         ...candidate,
+        isReimbursement,
+        friendId,
+        friendName,
         suggestedCategoryId,
         suggestedCategoryName,
         selectedCategoryId,

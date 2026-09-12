@@ -15,6 +15,8 @@ from src.schemas.transaction import (
     TransactionUpdate,
     TransactionDetailResponse,
     TransactionListItemResponse,
+    TransactionBulkDeleteRequest,
+    TransactionBulkDeleteResponse,
 )
 from src.services.receipt_processing_service import receipt_processing_service
 from src.services.transaction_service import transaction_service
@@ -193,7 +195,31 @@ def update_transaction(
         )
 
 
-# 8. Generic Delete transaction by ID
+# 8. Bulk Delete transactions
+@router.delete("/bulk", response_model=TransactionBulkDeleteResponse)
+def bulk_delete_transactions(
+    bulk_in: TransactionBulkDeleteRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Atomically delete multiple transactions for the authenticated user."""
+    try:
+        deleted_count = transaction_service.bulk_delete_transactions(
+            db=db,
+            user_id=current_user.id,
+            transaction_ids=bulk_in.transaction_ids,
+        )
+        return TransactionBulkDeleteResponse(
+            deleted_count=deleted_count,
+            transaction_ids=bulk_in.transaction_ids,
+        )
+    except NotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValidationError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+# 9. Generic Delete transaction by ID
 @router.delete("/{transaction_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_transaction(
     transaction_id: int,
@@ -201,10 +227,10 @@ def delete_transaction(
     current_user: User = Depends(get_current_user),
 ):
     """Delete a transaction."""
-    deleted = transaction_service.delete_transaction(db, current_user.id, transaction_id)
-    if not deleted:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Transaction not found",
-        )
-    return None
+    try:
+        transaction_service.delete_transaction(db, current_user.id, transaction_id)
+        return None
+    except NotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValidationError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

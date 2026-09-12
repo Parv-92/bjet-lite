@@ -68,6 +68,30 @@ export interface Merchant {
 // --- Transactions ---
 
 export type TransactionStatus = 'PENDING_CONFIRMATION' | 'CONFIRMED' | 'MANUAL';
+export type TransactionDirection = 'SENT' | 'RECEIVED' | 'TOP_UP';
+
+export interface Friend {
+  id: number;
+  user_id: number;
+  name: string;
+  recognized_name: string;
+  category_id: number;
+  created_at: string;
+  updated_at: string;
+  category: Category | null;
+}
+
+export interface CreateFriendRequest {
+  name: string;
+  recognized_name: string;
+  category_id: number;
+}
+
+export interface UpdateFriendRequest {
+  name?: string;
+  recognized_name?: string;
+  category_id?: number;
+}
 
 export interface Transaction {
   id: number;
@@ -81,6 +105,10 @@ export interface Transaction {
   upi_reference_id: string | null;
   upi_vpa: string | null;
   payment_app: string | null;
+  direction: TransactionDirection;
+  is_reimbursement: boolean;
+  friend_id: number | null;
+  amount_paid_for_someone_else: string | null;
   status: TransactionStatus;
   notes: string | null;
   has_receipt: boolean;
@@ -88,6 +116,7 @@ export interface Transaction {
   updated_at: string;
   category: Category | null;
   merchant: Merchant | null;
+  friend: Friend | null;
 }
 
 export type TransactionListItemResponse = Transaction;
@@ -107,6 +136,10 @@ export interface CreateManualTransactionRequest {
   upi_vpa?: string | null;
   payment_app?: string | null;
   notes?: string | null;
+  direction?: TransactionDirection;
+  is_reimbursement?: boolean | null;
+  friend_id?: number | null;
+  amount_paid_for_someone_else?: number | null;
 }
 
 export interface UpdateTransactionRequest {
@@ -117,6 +150,20 @@ export interface UpdateTransactionRequest {
   merchant_raw_name?: string | null;
   category_id?: number | null;
   notes?: string | null;
+  set_as_merchant_default?: boolean;
+  direction?: TransactionDirection;
+  is_reimbursement?: boolean | null;
+  friend_id?: number | null;
+  amount_paid_for_someone_else?: number | null;
+}
+
+export interface TransactionBulkDeleteRequest {
+  transaction_ids: number[];
+}
+
+export interface TransactionBulkDeleteResponse {
+  deleted_count: number;
+  transaction_ids: number[];
 }
 
 // --- Receipt Scanning & Confirmation ---
@@ -146,6 +193,7 @@ export interface ReceiptConfirmRequest {
   timestamp: string;
   merchant_name?: string;
   notes?: string;
+  is_reimbursement?: boolean;
 }
 
 // --- Budgets ---
@@ -183,6 +231,63 @@ export interface SetBudgetRequest {
   month: number;
   year: number;
   amount_limit: number;
+}
+
+export interface CategorySpendingItem {
+  category_id: number | null;
+  category_name: string;
+  category_color: string;
+  category_icon?: string | null;
+  spent_amount: string | number;
+  percentage: number;
+}
+
+export interface MonthlySpendingBreakdown {
+  month: number;
+  year: number;
+  total_spent: string | number;
+  items: CategorySpendingItem[];
+}
+
+// --- Budget Presets ---
+
+export interface BudgetPresetItem {
+  id: number;
+  preset_id: number;
+  category_id: number;
+  amount: string;
+  category?: Category | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BudgetPreset {
+  id: number;
+  user_id: number;
+  name: string;
+  items: BudgetPresetItem[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateBudgetPresetItemRequest {
+  category_id: number;
+  amount: number;
+}
+
+export interface CreateBudgetPresetRequest {
+  name: string;
+  items: CreateBudgetPresetItemRequest[];
+}
+
+export interface UpdateBudgetPresetRequest {
+  name?: string;
+  items?: CreateBudgetPresetItemRequest[];
+}
+
+export interface ApplyBudgetPresetRequest {
+  month: number;
+  year: number;
 }
 
 // --- Merchant Rules ---

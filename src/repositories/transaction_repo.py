@@ -15,9 +15,27 @@ class TransactionRepository(BaseRepository[Transaction]):
     def get_by_id_for_user(self, db: Session, user_id: int, transaction_id: int) -> Optional[Transaction]:
         return (
             db.query(Transaction)
-            .options(joinedload(Transaction.category), joinedload(Transaction.merchant))
+            .options(
+                joinedload(Transaction.category),
+                joinedload(Transaction.merchant),
+                joinedload(Transaction.friend),
+            )
             .filter(Transaction.id == transaction_id, Transaction.user_id == user_id)
             .first()
+        )
+
+    def get_by_ids_for_user(self, db: Session, user_id: int, transaction_ids: List[int]) -> List[Transaction]:
+        if not transaction_ids:
+            return []
+        return (
+            db.query(Transaction)
+            .options(
+                joinedload(Transaction.category),
+                joinedload(Transaction.merchant),
+                joinedload(Transaction.friend),
+            )
+            .filter(Transaction.id.in_(transaction_ids), Transaction.user_id == user_id)
+            .all()
         )
 
     def get_all_for_user(
@@ -36,6 +54,7 @@ class TransactionRepository(BaseRepository[Transaction]):
             .options(
                 joinedload(Transaction.category),
                 joinedload(Transaction.merchant),
+                joinedload(Transaction.friend),
                 defer(Transaction.raw_extracted_text),
             )
             .filter(Transaction.user_id == user_id)
@@ -61,6 +80,8 @@ class TransactionRepository(BaseRepository[Transaction]):
         receipt_image_path: Optional[str] = None,
     ) -> Transaction:
         timestamp = transaction_in.timestamp or datetime.now(timezone.utc)
+        direction = transaction_in.direction or "SENT"
+        is_reimbursement = bool(transaction_in.is_reimbursement)
         db_obj = Transaction(
             user_id=user_id,
             amount=transaction_in.amount,
@@ -73,6 +94,10 @@ class TransactionRepository(BaseRepository[Transaction]):
             upi_vpa=transaction_in.upi_vpa,
             payment_app=transaction_in.payment_app,
             notes=transaction_in.notes,
+            direction=direction,
+            is_reimbursement=is_reimbursement,
+            friend_id=transaction_in.friend_id,
+            amount_paid_for_someone_else=transaction_in.amount_paid_for_someone_else,
             status=status,
             raw_extracted_text=raw_text,
             receipt_image_path=receipt_image_path,
@@ -90,8 +115,10 @@ class TransactionRepository(BaseRepository[Transaction]):
         update_in: TransactionUpdate,
     ) -> Transaction:
         update_data = update_in.model_dump(exclude_unset=True)
+        update_data.pop("set_as_merchant_default", None)
         for field, value in update_data.items():
-            setattr(transaction_obj, field, value)
+            if hasattr(transaction_obj, field):
+                setattr(transaction_obj, field, value)
 
         db.add(transaction_obj)
         db.commit()
@@ -109,6 +136,20 @@ class TransactionRepository(BaseRepository[Transaction]):
             db.commit()
             return True
         return False
+
+    def bulk_delete_for_user(self, db: Session, user_id: int, transaction_ids: List[int]) -> int:
+        if not transaction_ids:
+            return 0
+        objs = (
+            db.query(Transaction)
+            .filter(Transaction.id.in_(transaction_ids), Transaction.user_id == user_id)
+            .all()
+        )
+        count = len(objs)
+        for obj in objs:
+            db.delete(obj)
+        db.commit()
+        return count
 
     def find_by_upi_reference_id(
         self, db: Session, user_id: int, upi_reference_id: str

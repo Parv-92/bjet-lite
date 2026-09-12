@@ -15,6 +15,7 @@ import {
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
+import { cleanupPdfPageImage } from 'expo-pdf-page-renderer';
 import {
   Camera,
   Images,
@@ -48,11 +49,14 @@ import { useReceiptUpload } from '../../src/hooks/useReceiptUpload';
 import { useMerchantRules } from '../../src/hooks/useMerchantRules';
 import { useCategories } from '../../src/hooks/useCategories';
 import { useTransactions } from '../../src/hooks/useTransactions';
+import { useFriends } from '../../src/hooks/useFriends';
 import { getApiErrorMessage } from '../../src/api/client';
 import { ReceiptScanResponse } from '../../src/types/api';
 import { colors } from '../../src/theme/colors';
 import { spacing } from '../../src/theme/spacing';
 import { fontSizes, fontWeights } from '../../src/theme/typography';
+// [DIAGNOSTIC INSTRUMENTATION - TEMPORARY]
+import { useRenderDiagnostic } from '../../src/utils/perfDiagnostic';
 
 export default function ScanScreen() {
   const router = useRouter();
@@ -69,9 +73,18 @@ export default function ScanScreen() {
   const [cancellationToken, setCancellationTokenState] = useState<CancellationToken | null>(null);
   const [extractionModalVisible, setExtractionModalVisible] = useState(false);
 
+  // [DIAGNOSTIC INSTRUMENTATION - TEMPORARY]
+  useRenderDiagnostic('ScanScreen', {
+    hasFile: !!selectedFile,
+    isExtracting,
+    extractionStep: extractionProgress?.step,
+    modalVisible: extractionModalVisible,
+  });
+
   const { data: rules } = useMerchantRules();
   const { data: categories } = useCategories();
   const { data: existingTransactions } = useTransactions();
+  const { data: friends } = useFriends();
 
   const {
     uploadReceipt,
@@ -86,6 +99,15 @@ export default function ScanScreen() {
     if (!validation.isValid) {
       setValidationError(validation.error || 'Invalid file selected.');
       return;
+    }
+    // Clean up previous temporary DocumentPicker cached file if replaced
+    if (
+      selectedFile &&
+      selectedFile.uri !== file.uri &&
+      selectedFile.source === 'document' &&
+      selectedFile.uri.includes('DocumentPicker')
+    ) {
+      cleanupPdfPageImage(selectedFile.uri).catch(() => {});
     }
     setValidationError(null);
     setSelectedFile(file);
@@ -191,10 +213,21 @@ export default function ScanScreen() {
 
     try {
       const service = new ReceiptExtractionService();
+      let lastReportedPage = -1;
+      let lastReportedStep = '';
+
       const result = await service.extract(
         selectedFile,
         progress => {
-          setExtractionProgress(progress);
+          // Throttle progress updates to avoid excessive re-renders during multi-page OCR
+          if (
+            progress.step !== lastReportedStep ||
+            (progress.currentPage !== undefined && progress.currentPage !== lastReportedPage)
+          ) {
+            lastReportedStep = progress.step;
+            lastReportedPage = progress.currentPage ?? -1;
+            setExtractionProgress(progress);
+          }
         },
         token
       );
@@ -232,6 +265,7 @@ export default function ScanScreen() {
         rules,
         categories,
         existingTransactions,
+        friends,
       });
 
       if (parsed.candidates.length > 0) {
@@ -259,6 +293,13 @@ export default function ScanScreen() {
   const handleReset = () => {
     if (cancellationToken) {
       cancellationToken.aborted = true;
+    }
+    if (
+      selectedFile &&
+      selectedFile.source === 'document' &&
+      selectedFile.uri.includes('DocumentPicker')
+    ) {
+      cleanupPdfPageImage(selectedFile.uri).catch(() => {});
     }
     setSelectedFile(null);
     setValidationError(null);

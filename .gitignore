@@ -33,3 +33,8 @@ local.properties
 .env
 .env.local
 .env.*.local
+
+# Scratch and local test artifacts
+scratch/
+*.xml
+benchmark_results.json

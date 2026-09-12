@@ -5,7 +5,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
-import { FolderTree, ChevronRight, Sliders } from 'lucide-react-native';
+import { FolderTree, ChevronRight, Sliders, Users, BookmarkCheck } from 'lucide-react-native';
 import { ScreenContainer } from '../../src/components/common/ScreenContainer';
 import { Card } from '../../src/components/ui/Card';
 import { Button } from '../../src/components/ui/Button';
@@ -99,6 +99,48 @@ export default function SettingsScreen() {
               <Text style={styles.settingTitle}>Merchant Rules</Text>
               <Text style={styles.settingDescription}>
                 Auto-categorization preferences by merchant pattern
+              </Text>
+            </View>
+          </View>
+          <ChevronRight size={18} color={colors.textMuted} />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.settingRow, styles.settingRowDivider]}
+          onPress={() => router.push('/friends')}
+          accessibilityRole="button"
+          accessibilityLabel="Manage friends and reimbursements"
+          activeOpacity={0.7}
+        >
+          <View style={styles.settingRowLeft}>
+            <View style={[styles.settingIconWrapper, styles.friendIconWrapper]}>
+              <Users size={20} color="#38BDF8" />
+            </View>
+            <View style={styles.settingTextContainer}>
+              <Text style={styles.settingTitle}>Friends & Reimbursements</Text>
+              <Text style={styles.settingDescription}>
+                Auto-recognize incoming payments from friends
+              </Text>
+            </View>
+          </View>
+          <ChevronRight size={18} color={colors.textMuted} />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.settingRow, styles.settingRowDivider]}
+          onPress={() => router.push('/budget-presets')}
+          accessibilityRole="button"
+          accessibilityLabel="Manage budget presets"
+          activeOpacity={0.7}
+        >
+          <View style={styles.settingRowLeft}>
+            <View style={[styles.settingIconWrapper, styles.presetIconWrapper]}>
+              <BookmarkCheck size={20} color="#F59E0B" />
+            </View>
+            <View style={styles.settingTextContainer}>
+              <Text style={styles.settingTitle}>Budget Presets</Text>
+              <Text style={styles.settingDescription}>
+                Reusable monthly budget templates and category limits
               </Text>
             </View>
           </View>
@@ -216,6 +258,12 @@ const styles = StyleSheet.create({
   },
   ruleIconWrapper: {
     backgroundColor: 'rgba(139, 92, 246, 0.12)',
+  },
+  friendIconWrapper: {
+    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+  },
+  presetIconWrapper: {
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
   },
   logoutButton: {
     marginTop: spacing.lg,

@@ -7,31 +7,41 @@ import { getBudgetSummaryApi } from '../api/budgets';
 import { getRecentTransactionsApi, getPendingTransactionsApi } from '../api/transactions';
 import { getApiErrorMessage } from '../api/client';
 import { BudgetSummary, TransactionListItemResponse } from '../types/api';
+import { useAuth } from './useAuth';
 
 export function useBudgetSummary(month: number, year: number) {
+  const { isAuthenticated } = useAuth();
+
   return useQuery<BudgetSummary[], Error>({
     queryKey: ['budgets', 'summary', month, year],
     queryFn: () => getBudgetSummaryApi(month, year),
     staleTime: 60_000, // 1 minute
     retry: 1,
+    enabled: isAuthenticated,
   });
 }
 
 export function useRecentTransactions(limit: number = 5) {
+  const { isAuthenticated } = useAuth();
+
   return useQuery<TransactionListItemResponse[], Error>({
     queryKey: ['transactions', 'recent', limit],
     queryFn: () => getRecentTransactionsApi(limit),
     staleTime: 60_000,
     retry: 1,
+    enabled: isAuthenticated,
   });
 }
 
 export function usePendingTransactions(limit: number = 5) {
+  const { isAuthenticated } = useAuth();
+
   return useQuery<TransactionListItemResponse[], Error>({
     queryKey: ['transactions', 'pending', limit],
     queryFn: () => getPendingTransactionsApi(limit),
     staleTime: 30_000,
     retry: 1,
+    enabled: isAuthenticated,
   });
 }
 

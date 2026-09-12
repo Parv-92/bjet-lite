@@ -45,6 +45,11 @@ export async function clearStoredToken(): Promise<void> {
 
 type UnauthorizedListener = () => void;
 let unauthorizedListeners: UnauthorizedListener[] = [];
+let isSessionExpiring = false;
+
+export function resetSessionExpiring(): void {
+  isSessionExpiring = false;
+}
 
 export function registerUnauthorizedHandler(listener: UnauthorizedListener): () => void {
   unauthorizedListeners.push(listener);
@@ -54,6 +59,10 @@ export function registerUnauthorizedHandler(listener: UnauthorizedListener): () 
 }
 
 function notifyUnauthorized(): void {
+  if (isSessionExpiring) {
+    return;
+  }
+  isSessionExpiring = true;
   unauthorizedListeners.forEach((listener) => {
     try {
       listener();
@@ -103,15 +112,43 @@ apiClient.interceptors.request.use(
       config.headers.set('Authorization', `Bearer ${token}`);
     }
 
+    // [DIAGNOSTIC INSTRUMENTATION - TEMPORARY] Record start time for performance tracking
+    (config as any)._perfStartTime = Date.now();
+
     return config;
   },
   (error: unknown) => Promise.reject(error)
 );
 
-// Response Interceptor: Robust 401 handling & Error extraction
+// Response Interceptor: Robust 401 handling & Error extraction & [PERF][API] logging
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // [DIAGNOSTIC INSTRUMENTATION - TEMPORARY] Log API success timing
+    const startTime = (response.config as any)?._perfStartTime || Date.now();
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+    const url = response.config.url || '';
+    const method = response.config.method?.toUpperCase() || 'GET';
+    const status = response.status;
+    const dataSize = response.data ? JSON.stringify(response.data).length : 0;
+    console.log(
+      `[PERF][API]\nEndpoint: ${method} ${url}\nStart: ${new Date(startTime).toISOString()}\nEnd: ${new Date(endTime).toISOString()}\nDuration: ${duration} ms\nStatus: ${status}\nResponse Size: ${dataSize} bytes`
+    );
+
+    return response;
+  },
   (error: AxiosError<APIError>) => {
+    // [DIAGNOSTIC INSTRUMENTATION - TEMPORARY] Log API failure timing
+    const startTime = (error.config as any)?._perfStartTime || Date.now();
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+    const url = error.config?.url || '';
+    const method = error.config?.method?.toUpperCase() || 'GET';
+    const status = error.response?.status || 'ERROR';
+    console.log(
+      `[PERF][API]\nEndpoint: ${method} ${url}\nStart: ${new Date(startTime).toISOString()}\nEnd: ${new Date(endTime).toISOString()}\nDuration: ${duration} ms\nStatus: ${status} (FAILED)`
+    );
+
     if (error.response?.status === 401) {
       const pathname = getRequestPathname(error.config?.url);
       // Exclude public authentication endpoints (/auth/login, /auth/register)

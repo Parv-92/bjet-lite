@@ -3,6 +3,7 @@
  * Provides SafeAreaProvider, QueryClientProvider, AuthProvider,
  * and unified RouteGuard with recoverable offline/network error handling.
  */
+import '../src/services/receipt/extractors/domMatrixPolyfill';
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';

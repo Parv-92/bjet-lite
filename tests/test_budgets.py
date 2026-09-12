@@ -242,3 +242,193 @@ def test_budget_tenant_isolation(client, auth_headers):
         headers=user_b_headers,
     )
     assert status_b.status_code == 404
+
+
+def test_spending_breakdown_not_intercepted_by_category_route(client, auth_headers):
+    """GET /budgets/spending-breakdown must return 200 and not be treated as a dynamic category ID."""
+    now = datetime.now(timezone.utc)
+    resp = client.get(
+        f"/api/v1/budgets/spending-breakdown?month={now.month}&year={now.year}",
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "total_spent" in data
+    assert "items" in data
+    assert isinstance(data["items"], list)
+
+
+def test_monthly_spending_breakdown_comprehensive(client, auth_headers):
+    """Verify authoritative spending breakdown including Uncategorized, reimbursements, and paid-for-others."""
+    cat_resp = client.get("/api/v1/categories", headers=auth_headers)
+    cats = {c["name"]: c for c in cat_resp.json()}
+    dining_cat = cats["Food & Dining"]
+    transport_cat = cats["Transportation"]
+    shopping_cat = cats["Shopping"]
+
+    # Target specific month: 7/2026
+    month = 7
+    year = 2026
+    dt_str = "2026-07-15T10:00:00Z"
+
+    # Initially empty
+    empty_resp = client.get(f"/api/v1/budgets/spending-breakdown?month={month}&year={year}", headers=auth_headers)
+    assert empty_resp.status_code == 200
+    assert float(empty_resp.json()["total_spent"]) == 0.00
+    assert len(empty_resp.json()["items"]) == 0
+
+    # 1. Food: 2000 outgoing, 500 paid for someone else -> Net personal 1500
+    client.post(
+        "/api/v1/transactions",
+        json={
+            "amount": 2000.00,
+            "category_id": dining_cat["id"],
+            "amount_paid_for_someone_else": 500.00,
+            "merchant_raw_name": "Group Dinner",
+            "timestamp": dt_str,
+        },
+        headers=auth_headers,
+    )
+
+    # 2. Food: 500 outgoing -> Net personal 500 (Gross food net = 2000)
+    client.post(
+        "/api/v1/transactions",
+        json={
+            "amount": 500.00,
+            "category_id": dining_cat["id"],
+            "merchant_raw_name": "Lunch Cafe",
+            "timestamp": dt_str,
+        },
+        headers=auth_headers,
+    )
+
+    # 3. Food Reimbursement: 800 received -> Net Food = 2000 - 800 = 1200
+    client.post(
+        "/api/v1/transactions",
+        json={
+            "amount": 800.00,
+            "direction": "RECEIVED",
+            "is_reimbursement": True,
+            "category_id": dining_cat["id"],
+            "merchant_raw_name": "Sourav reimbursement",
+            "timestamp": dt_str,
+        },
+        headers=auth_headers,
+    )
+
+    # 4. Transport: 800 outgoing -> Net Transport = 800
+    client.post(
+        "/api/v1/transactions",
+        json={
+            "amount": 800.00,
+            "category_id": transport_cat["id"],
+            "merchant_raw_name": "Uber ride",
+            "timestamp": dt_str,
+        },
+        headers=auth_headers,
+    )
+
+    # 5. Shopping: 300 outgoing, then 300 reimbursement -> Net Shopping = 0 (MUST NOT BE INCLUDED IN SLICES!)
+    client.post(
+        "/api/v1/transactions",
+        json={
+            "amount": 300.00,
+            "category_id": shopping_cat["id"],
+            "merchant_raw_name": "Shopping item",
+            "timestamp": dt_str,
+        },
+        headers=auth_headers,
+    )
+    client.post(
+        "/api/v1/transactions",
+        json={
+            "amount": 300.00,
+            "direction": "RECEIVED",
+            "is_reimbursement": True,
+            "category_id": shopping_cat["id"],
+            "merchant_raw_name": "Refund for shopping",
+            "timestamp": dt_str,
+        },
+        headers=auth_headers,
+    )
+
+    # 6. Uncategorized: 400 outgoing (category_id is None) -> Net Uncategorized = 400
+    client.post(
+        "/api/v1/transactions",
+        json={
+            "amount": 400.00,
+            "category_id": None,
+            "merchant_raw_name": "Mystery Vendor",
+            "timestamp": dt_str,
+        },
+        headers=auth_headers,
+    )
+
+    # Fetch breakdown
+    breakdown_resp = client.get(
+        f"/api/v1/budgets/spending-breakdown?month={month}&year={year}",
+        headers=auth_headers,
+    )
+    assert breakdown_resp.status_code == 200
+    data = breakdown_resp.json()
+
+    # Total spent: 1200 + 800 + 400 = 2400.00
+    assert float(data["total_spent"]) == 2400.00
+
+    items = data["items"]
+    # Shopping had net spending 0, so exactly 3 items: Food (1200), Transport (800), Uncategorized (400)
+    assert len(items) == 3
+
+    # Check order: descending by spent_amount
+    assert items[0]["category_name"] == "Food & Dining"
+    assert float(items[0]["spent_amount"]) == 1200.00
+    assert items[0]["percentage"] == 50.0
+
+    assert items[1]["category_name"] == "Transportation"
+    assert float(items[1]["spent_amount"]) == 800.00
+    assert items[1]["percentage"] == 33.3
+
+    assert items[2]["category_name"] == "Uncategorized"
+    assert items[2]["category_color"] == "#9E9E9E"
+    assert float(items[2]["spent_amount"]) == 400.00
+    assert items[2]["percentage"] == 16.7
+
+
+def test_spending_breakdown_tenant_isolation(client, auth_headers):
+    """User B cannot see User A's monthly spending breakdown."""
+    cat_resp = client.get("/api/v1/categories", headers=auth_headers)
+    dining_cat = next(c for c in cat_resp.json() if c["name"] == "Food & Dining")
+
+    month = 9
+    year = 2026
+    # User A creates transaction
+    client.post(
+        "/api/v1/transactions",
+        json={
+            "amount": 1500.00,
+            "category_id": dining_cat["id"],
+            "timestamp": "2026-09-02T12:00:00Z",
+        },
+        headers=auth_headers,
+    )
+
+    # Register and login User B
+    client.post(
+        "/api/v1/auth/register",
+        json={"email": "breakdown_b@example.com", "password": "Password123!"},
+    )
+    login_resp = client.post(
+        "/api/v1/auth/login",
+        json={"email": "breakdown_b@example.com", "password": "Password123!"},
+    )
+    user_b_headers = {"Authorization": f"Bearer {login_resp.json()['access_token']}"}
+
+    # User B checks breakdown for same period
+    b_resp = client.get(
+        f"/api/v1/budgets/spending-breakdown?month={month}&year={year}",
+        headers=user_b_headers,
+    )
+    assert b_resp.status_code == 200
+    assert float(b_resp.json()["total_spent"]) == 0.00
+    assert len(b_resp.json()["items"]) == 0
+

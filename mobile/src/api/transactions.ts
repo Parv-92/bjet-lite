@@ -11,6 +11,7 @@ import {
   TransactionStatus,
   CreateManualTransactionRequest,
   UpdateTransactionRequest,
+  TransactionBulkDeleteResponse,
 } from '../types/api';
 
 export interface GetTransactionsParams {
@@ -97,6 +98,19 @@ export async function updateTransactionApi(
  */
 export async function deleteTransactionApi(id: number): Promise<void> {
   await apiClient.delete(`/transactions/${id}`);
+}
+
+/**
+ * Bulk delete transactions by IDs.
+ * DELETE /api/v1/transactions/bulk
+ */
+export async function bulkDeleteTransactionsApi(
+  transactionIds: number[]
+): Promise<TransactionBulkDeleteResponse> {
+  const response = await apiClient.delete<TransactionBulkDeleteResponse>('/transactions/bulk', {
+    data: { transaction_ids: transactionIds },
+  });
+  return response.data;
 }
 
 /**

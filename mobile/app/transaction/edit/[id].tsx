@@ -16,7 +16,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ArrowLeft, ChevronRight, ReceiptText } from 'lucide-react-native';
+import { ArrowLeft, ChevronRight, ReceiptText, Check } from 'lucide-react-native';
 import { ScreenContainer } from '../../../src/components/common/ScreenContainer';
 import { Input } from '../../../src/components/ui/Input';
 import { Button } from '../../../src/components/ui/Button';
@@ -27,21 +27,45 @@ import { CategoryPickerModal } from '../../../src/components/transactions/Catego
 import { useTransaction } from '../../../src/hooks/useTransaction';
 import { useUpdateTransaction } from '../../../src/hooks/useTransactionMutations';
 import { useCategories } from '../../../src/hooks/useCategories';
+import { getApiErrorMessage } from '../../../src/api/client';
 import { colors } from '../../../src/theme/colors';
-import { spacing } from '../../../src/theme/spacing';
+import { spacing, radii } from '../../../src/theme/spacing';
 import { fontSizes, fontWeights } from '../../../src/theme/typography';
 
-const editTransactionSchema = z.object({
-  amount: z
-    .string()
-    .min(1, 'Amount is required')
-    .refine((val) => !isNaN(parseFloat(val)) && parseFloat(val) > 0, {
-      message: 'Amount must be greater than 0',
-    }),
-  merchant_raw_name: z.string().optional(),
-  category_id: z.number().nullable().optional(),
-  notes: z.string().optional(),
-});
+const editTransactionSchema = z
+  .object({
+    amount: z
+      .string()
+      .min(1, 'Amount is required')
+      .refine((val) => !isNaN(parseFloat(val)) && parseFloat(val) > 0, {
+        message: 'Amount must be greater than 0',
+      }),
+    merchant_raw_name: z.string().optional(),
+    category_id: z.number().nullable().optional(),
+    notes: z.string().optional(),
+    set_as_merchant_default: z.boolean().optional(),
+    paid_for_someone_else: z.boolean().optional(),
+    amount_paid_for_someone_else: z.string().optional(),
+    is_reimbursement: z.boolean().optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.paid_for_someone_else) {
+        if (!data.amount_paid_for_someone_else || data.amount_paid_for_someone_else.trim() === '') {
+          return false;
+        }
+        const paidVal = parseFloat(data.amount_paid_for_someone_else);
+        const totalVal = parseFloat(data.amount);
+        if (isNaN(paidVal) || paidVal <= 0) return false;
+        if (!isNaN(totalVal) && paidVal > totalVal) return false;
+      }
+      return true;
+    },
+    {
+      message: 'Amount paid for others must be greater than 0 and cannot exceed total amount',
+      path: ['amount_paid_for_someone_else'],
+    }
+  );
 
 type EditTransactionFormData = z.infer<typeof editTransactionSchema>;
 
@@ -71,27 +95,48 @@ export default function EditTransactionScreen() {
       merchant_raw_name: '',
       category_id: null,
       notes: '',
+      set_as_merchant_default: false,
+      paid_for_someone_else: false,
+      amount_paid_for_someone_else: '',
+      is_reimbursement: false,
     },
   });
 
   // Populate form with existing transaction data
   useEffect(() => {
     if (tx) {
+      const hasPaidForOthers = !!(
+        tx.amount_paid_for_someone_else &&
+        parseFloat(tx.amount_paid_for_someone_else) > 0
+      );
       reset({
         amount: typeof tx.amount === 'string' ? parseFloat(tx.amount).toString() : String(tx.amount),
         merchant_raw_name: tx.merchant_raw_name || tx.merchant?.name || '',
         category_id: tx.category_id || (tx.category ? tx.category.id : null),
         notes: tx.notes || '',
+        set_as_merchant_default: false,
+        paid_for_someone_else: hasPaidForOthers,
+        amount_paid_for_someone_else: hasPaidForOthers && tx.amount_paid_for_someone_else
+          ? parseFloat(tx.amount_paid_for_someone_else).toString()
+          : '',
+        is_reimbursement: Boolean(tx.is_reimbursement),
       });
     }
   }, [tx, reset]);
 
   const selectedCategoryId = watch('category_id');
   const selectedCategory = categories?.find((c) => c.id === selectedCategoryId);
+  const watchedMerchant = watch('merchant_raw_name');
+  const merchantName = (watchedMerchant || tx?.merchant?.name || tx?.merchant_raw_name || '').trim();
 
   const onSubmit = async (values: EditTransactionFormData) => {
     setApiError(null);
     try {
+      const paidForSomeoneElse = !!values.paid_for_someone_else;
+      const paidAmount = paidForSomeoneElse && values.amount_paid_for_someone_else
+        ? parseFloat(values.amount_paid_for_someone_else)
+        : null;
+
       await updateMutation.mutateAsync({
         id: transactionId,
         data: {
@@ -99,11 +144,14 @@ export default function EditTransactionScreen() {
           merchant_raw_name: values.merchant_raw_name?.trim() || null,
           category_id: values.category_id !== undefined ? values.category_id : null,
           notes: values.notes?.trim() || null,
+          set_as_merchant_default: !!values.set_as_merchant_default,
+          amount_paid_for_someone_else: paidAmount,
+          is_reimbursement: tx?.direction === 'RECEIVED' ? values.is_reimbursement : undefined,
         },
       });
       router.back();
     } catch (err: any) {
-      setApiError(err?.message || 'Failed to update transaction.');
+      setApiError(getApiErrorMessage(err));
     }
   };
 
@@ -225,6 +273,125 @@ export default function EditTransactionScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* Optional Merchant Default Action */}
+        {merchantName.length > 0 && selectedCategoryId !== null && (
+          <Controller
+            control={control}
+            name="set_as_merchant_default"
+            render={({ field: { value, onChange } }) => (
+              <TouchableOpacity
+                style={styles.defaultCheckboxRow}
+                onPress={() => onChange(!value)}
+                activeOpacity={0.7}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: !!value }}
+                accessibilityLabel={`Make ${selectedCategory?.name || 'this category'} the default for ${merchantName}`}
+              >
+                <View style={[styles.checkbox, value && styles.checkboxActive]}>
+                  {value && <Check color={colors.background} size={14} strokeWidth={3} />}
+                </View>
+                <Text style={styles.defaultCheckboxText}>
+                  Make this the default category for{' '}
+                  <Text style={styles.merchantHighlight}>{merchantName}</Text>
+                </Text>
+              </TouchableOpacity>
+            )}
+          />
+        )}
+
+        {/* Paid for someone else (Outgoing expenses only) */}
+        {tx && tx.direction !== 'RECEIVED' && (
+          <View style={styles.adjustmentSection}>
+            <Controller
+              control={control}
+              name="paid_for_someone_else"
+              render={({ field: { value, onChange } }) => (
+                <TouchableOpacity
+                  style={styles.defaultCheckboxRow}
+                  onPress={() => {
+                    const next = !value;
+                    onChange(next);
+                    if (!next) {
+                      setValue('amount_paid_for_someone_else', '');
+                    }
+                  }}
+                  activeOpacity={0.7}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: !!value }}
+                >
+                  <View style={[styles.checkbox, value && styles.checkboxActive]}>
+                    {value && <Check color={colors.background} size={14} strokeWidth={3} />}
+                  </View>
+                  <Text style={styles.defaultCheckboxText}>
+                    I paid part of this for someone else
+                  </Text>
+                </TouchableOpacity>
+              )}
+            />
+
+            {watch('paid_for_someone_else') && (
+              <View style={styles.paidForElseContainer}>
+                <Controller
+                  control={control}
+                  name="amount_paid_for_someone_else"
+                  render={({ field: { onChange, onBlur, value } }) => (
+                    <Input
+                      label="Amount Paid for Others (₹) *"
+                      placeholder="e.g. 500"
+                      keyboardType="decimal-pad"
+                      value={value}
+                      onChangeText={onChange}
+                      onBlur={onBlur}
+                      error={errors.amount_paid_for_someone_else?.message}
+                    />
+                  )}
+                />
+                {(() => {
+                  const total = parseFloat(watch('amount') || '0');
+                  const paid = parseFloat(watch('amount_paid_for_someone_else') || '0');
+                  if (!isNaN(total) && !isNaN(paid) && paid > 0 && paid <= total) {
+                    return (
+                      <Text style={styles.netShareNotice}>
+                        Your personal spending share:{' '}
+                        <Text style={styles.netShareHighlight}>
+                          ₹{(total - paid).toFixed(2)}
+                        </Text>
+                      </Text>
+                    );
+                  }
+                  return null;
+                })()}
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Incoming Reimbursement Toggle (Received transactions only) */}
+        {tx && tx.direction === 'RECEIVED' && (
+          <View style={styles.adjustmentSection}>
+            <Controller
+              control={control}
+              name="is_reimbursement"
+              render={({ field: { value, onChange } }) => (
+                <TouchableOpacity
+                  style={styles.defaultCheckboxRow}
+                  onPress={() => onChange(!value)}
+                  activeOpacity={0.7}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: !!value }}
+                >
+                  <View style={[styles.checkbox, value && styles.checkboxActive]}>
+                    {value && <Check color={colors.background} size={14} strokeWidth={3} />}
+                  </View>
+                  <Text style={styles.defaultCheckboxText}>
+                    This payment is a Category Reimbursement (reduces spending)
+                  </Text>
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        )}
+
         {/* Notes */}
         <Controller
           control={control}
@@ -343,5 +510,58 @@ const styles = StyleSheet.create({
   submitButton: {
     marginTop: spacing.lg,
     marginBottom: spacing.xxl,
+  },
+  defaultCheckboxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: -spacing.xs,
+    marginBottom: spacing.md,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: 2,
+    gap: spacing.sm,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxActive: {
+    backgroundColor: colors.brand,
+    borderColor: colors.brand,
+  },
+  defaultCheckboxText: {
+    color: colors.textSecondary,
+    fontSize: fontSizes.sm,
+    flex: 1,
+  },
+  merchantHighlight: {
+    color: colors.text,
+    fontWeight: fontWeights.semibold,
+  },
+  adjustmentSection: {
+    marginBottom: spacing.xs,
+  },
+  paidForElseContainer: {
+    backgroundColor: colors.surfaceElevated,
+    padding: spacing.md,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.borderMuted,
+    marginTop: -spacing.xs,
+    marginBottom: spacing.md,
+  },
+  netShareNotice: {
+    color: colors.textSecondary,
+    fontSize: fontSizes.xs,
+    marginTop: spacing.xs,
+  },
+  netShareHighlight: {
+    color: colors.brandLight,
+    fontWeight: fontWeights.bold,
   },
 });

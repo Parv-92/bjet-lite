@@ -315,13 +315,15 @@
     "amount": 160.00,
     "category_id": 2,
     "notes": "Updated note",
-    "status": "CONFIRMED"
+    "status": "CONFIRMED",
+    "set_as_merchant_default": false
   }
   ```
+  - `set_as_merchant_default` *(bool, optional, default=false)*: When `true`, atomically creates or updates a user-specific `UserMerchantRule` mapping the transaction's merchant pattern to `category_id`. Does not mutate global shared merchant entities.
 - **Response Structure (`200 OK`)**: Returns updated `TransactionDetailResponse`.
 - **Error Responses**:
   - `404 Not Found`: Transaction or category does not exist / not accessible.
-  - `400 Bad Request`
+  - `400 Bad Request`: Validation failure (e.g. setting merchant default without a valid category or without an identifiable merchant name).
 
 ---
 

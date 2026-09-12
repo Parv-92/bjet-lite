@@ -12,14 +12,37 @@ from src.core.exceptions import (
     ValidationError,
 )
 from src.models import *  # Ensure all models are registered with Base metadata
+from sqlalchemy import inspect, text
+
 from src.repositories.category_repo import category_repo
 from src.api.v1.router import api_router
+
+
+def _ensure_sqlite_schema(db_engine):
+    """Ensure newly introduced Phase 14 columns exist on SQLite transactions table."""
+    try:
+        inspector = inspect(db_engine)
+        if "transactions" in inspector.get_table_names():
+            existing_cols = {col["name"] for col in inspector.get_columns("transactions")}
+            with db_engine.begin() as conn:
+                if "direction" not in existing_cols:
+                    conn.execute(text("ALTER TABLE transactions ADD COLUMN direction VARCHAR(20) DEFAULT 'SENT' NOT NULL"))
+                if "is_reimbursement" not in existing_cols:
+                    conn.execute(text("ALTER TABLE transactions ADD COLUMN is_reimbursement BOOLEAN DEFAULT 0 NOT NULL"))
+                if "friend_id" not in existing_cols:
+                    conn.execute(text("ALTER TABLE transactions ADD COLUMN friend_id INTEGER REFERENCES friends(id) ON DELETE SET NULL"))
+                if "amount_paid_for_someone_else" not in existing_cols:
+                    conn.execute(text("ALTER TABLE transactions ADD COLUMN amount_paid_for_someone_else NUMERIC(10, 2)"))
+    except Exception as e:
+        # If in-memory or database engine does not support or already migrated, continue safely
+        pass
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: Ensure tables are created and default categories seeded
     Base.metadata.create_all(bind=engine)
+    _ensure_sqlite_schema(engine)
     db = SessionLocal()
     try:
         category_repo.init_default_categories(db)

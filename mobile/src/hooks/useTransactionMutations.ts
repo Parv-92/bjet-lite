@@ -8,11 +8,13 @@ import {
   createTransactionApi,
   updateTransactionApi,
   deleteTransactionApi,
+  bulkDeleteTransactionsApi,
 } from '../api/transactions';
 import {
   CreateManualTransactionRequest,
   UpdateTransactionRequest,
   TransactionDetailResponse,
+  TransactionBulkDeleteResponse,
 } from '../types/api';
 
 export function useCreateTransaction() {
@@ -36,10 +38,14 @@ export function useUpdateTransaction() {
     { id: number; data: UpdateTransactionRequest }
   >({
     mutationFn: ({ id, data }) => updateTransactionApi(id, data),
-    onSuccess: (_, { id }) => {
+    onSuccess: (_, { id, data }) => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       queryClient.invalidateQueries({ queryKey: ['transactions', id] });
       queryClient.invalidateQueries({ queryKey: ['budgets', 'summary'] });
+      if (data.set_as_merchant_default) {
+        queryClient.invalidateQueries({ queryKey: ['rules'] });
+        queryClient.invalidateQueries({ queryKey: ['merchants'] });
+      }
     },
   });
 }
@@ -53,6 +59,22 @@ export function useDeleteTransaction() {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       queryClient.removeQueries({ queryKey: ['transactions', id] });
       queryClient.invalidateQueries({ queryKey: ['budgets', 'summary'] });
+    },
+  });
+}
+
+export function useBulkDeleteTransactions() {
+  const queryClient = useQueryClient();
+
+  return useMutation<TransactionBulkDeleteResponse, Error, number[]>({
+    mutationFn: (ids: number[]) => bulkDeleteTransactionsApi(ids),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      for (const id of data.transaction_ids) {
+        queryClient.removeQueries({ queryKey: ['transactions', id] });
+      }
+      queryClient.invalidateQueries({ queryKey: ['budgets'] });
+      queryClient.invalidateQueries({ queryKey: ['categories'] });
     },
   });
 }

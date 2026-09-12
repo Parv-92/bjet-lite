@@ -19,6 +19,7 @@ from src.models.transaction import Transaction, TransactionStatus
 from src.repositories.category_repo import category_repo
 from src.repositories.merchant_repo import merchant_repo
 from src.repositories.transaction_repo import transaction_repo
+from src.repositories.budget_repo import calculate_category_net_spending
 from src.schemas.receipt import (
     DuplicateInfo,
     ExtractionMetadata,
@@ -241,6 +242,22 @@ class ReceiptProcessingService:
                 default_category_id=None,
             )
             transaction.merchant_id = merchant.id
+
+        # Handle reimbursement vs normal expense
+        if confirm_in.is_reimbursement:
+            m, y = confirm_in.timestamp.month, confirm_in.timestamp.year
+            available = calculate_category_net_spending(
+                db, user_id, confirm_in.category_id, m, y, excluding_transaction_ids=[transaction.id]
+            )
+            if confirm_in.amount > available:
+                raise ValidationError(
+                    "Cannot apply this payment as a reimbursement because the selected category does not have enough spending to offset this amount."
+                )
+            transaction.direction = "RECEIVED"
+            transaction.is_reimbursement = True
+        else:
+            transaction.direction = "SENT"
+            transaction.is_reimbursement = False
 
         # Transition status safely to CONFIRMED
         transaction.status = TransactionStatus.CONFIRMED
