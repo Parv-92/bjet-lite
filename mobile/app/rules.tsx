@@ -173,9 +173,6 @@ export default function MerchantRulesScreen() {
             <Text style={styles.sectionTitle}>
               My Rules {rules && rules.length > 0 && `(${filteredRules.length})`}
             </Text>
-            {rules && rules.length > 0 && (
-              <Text style={styles.orderLabel}>Evaluated priority DESC</Text>
-            )}
           </View>
 
           {filteredRules.length === 0 ? (

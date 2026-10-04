@@ -24,13 +24,14 @@ import {
   CheckCircle2,
   TrendingUp,
   AlertCircle,
+  Trash2,
 } from 'lucide-react-native';
 import { ScreenContainer } from '../../../src/components/common/ScreenContainer';
 import { Card } from '../../../src/components/ui/Card';
 import { Button } from '../../../src/components/ui/Button';
 import { LoadingSpinner } from '../../../src/components/ui/LoadingSpinner';
 import { ErrorMessage } from '../../../src/components/ui/ErrorMessage';
-import { useCategoryBudgetStatus, useSetBudget } from '../../../src/hooks/useBudgets';
+import { useCategoryBudgetStatus, useSetBudget, useDeleteBudget } from '../../../src/hooks/useBudgets';
 import { getApiErrorMessage } from '../../../src/api/client';
 import { colors } from '../../../src/theme/colors';
 import { spacing, radii } from '../../../src/theme/spacing';
@@ -57,6 +58,7 @@ export default function EditBudgetScreen() {
   } = useCategoryBudgetStatus(categoryId, month, year);
 
   const setBudgetMutation = useSetBudget();
+  const deleteBudgetMutation = useDeleteBudget();
 
   const [amountStr, setAmountStr] = useState('');
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -73,12 +75,69 @@ export default function EditBudgetScreen() {
     router.back();
   };
 
+  const handleRemove = () => {
+    const name = budgetStatus?.category?.name || `Category #${categoryId}`;
+    Alert.alert(
+      'Remove from Month?',
+      `Are you sure you want to remove "${name}" from the ${monthName} ${year} budget?\n\nExisting transactions will not be deleted.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            setSubmitError(null);
+            try {
+              await deleteBudgetMutation.mutateAsync({
+                category_id: categoryId,
+                month,
+                year,
+              });
+              router.back();
+            } catch (err: any) {
+              setSubmitError(getApiErrorMessage(err));
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const handleUpdate = async () => {
     setSubmitError(null);
 
     const numAmount = parseFloat(amountStr);
-    if (isNaN(numAmount) || numAmount <= 0) {
-      Alert.alert('Invalid Amount', 'Please enter a valid positive budget limit.');
+    if (isNaN(numAmount) || numAmount < 0) {
+      Alert.alert('Invalid Amount', 'Please enter a valid non-negative budget limit.');
+      return;
+    }
+
+    const name = budgetStatus?.category?.name || `Category #${categoryId}`;
+
+    if (numAmount === 0) {
+      Alert.alert(
+        'Remove Category Budget?',
+        `Setting the budget limit to ₹0 will remove "${name}" from the ${monthName} ${year} budget.\n\nDo you want to proceed?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Remove Budget',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await deleteBudgetMutation.mutateAsync({
+                  category_id: categoryId,
+                  month,
+                  year,
+                });
+                router.back();
+              } catch (err: any) {
+                setSubmitError(getApiErrorMessage(err));
+              }
+            },
+          },
+        ]
+      );
       return;
     }
 
@@ -198,9 +257,18 @@ export default function EditBudgetScreen() {
             title={setBudgetMutation.isPending ? 'Updating...' : 'Update Budget Limit'}
             icon={<CheckCircle2 color={colors.background} size={18} />}
             onPress={handleUpdate}
-            disabled={setBudgetMutation.isPending}
+            disabled={setBudgetMutation.isPending || deleteBudgetMutation.isPending}
             variant="primary"
             style={styles.fullWidth}
+          />
+          <Button
+            title={deleteBudgetMutation.isPending ? 'Removing...' : 'Remove from this Month'}
+            icon={<Trash2 color={colors.danger} size={18} />}
+            onPress={handleRemove}
+            disabled={setBudgetMutation.isPending || deleteBudgetMutation.isPending}
+            variant="ghost"
+            style={styles.removeButton}
+            textStyle={styles.removeButtonText}
           />
           <Button
             title="Cancel"
@@ -339,6 +407,16 @@ const styles = StyleSheet.create({
   },
   fullWidth: {
     width: '100%',
+  },
+  removeButton: {
+    width: '100%',
+    borderColor: 'rgba(239, 68, 68, 0.4)',
+    borderWidth: 1,
+    backgroundColor: 'rgba(239, 68, 68, 0.05)',
+  },
+  removeButtonText: {
+    color: colors.danger,
+    fontWeight: fontWeights.semibold,
   },
   errorContainer: {
     alignItems: 'center',

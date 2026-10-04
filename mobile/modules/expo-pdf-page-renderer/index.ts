@@ -42,3 +42,12 @@ export async function cleanupPdfPageImage(filePath: string): Promise<boolean> {
     return false;
   }
 }
+
+export async function sanitizeTemporaryFiles(olderThanMs: number = 30 * 60 * 1000): Promise<number> {
+  if (!nativeModule?.sanitizeTemporaryFiles) return 0;
+  try {
+    return await nativeModule.sanitizeTemporaryFiles(olderThanMs);
+  } catch {
+    return 0;
+  }
+}

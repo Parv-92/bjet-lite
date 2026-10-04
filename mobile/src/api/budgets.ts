@@ -59,3 +59,18 @@ export async function getCategoryBudgetStatusApi(
   });
   return response.data;
 }
+
+/**
+ * Delete / remove a category budget for a specific month and year.
+ * DELETE /api/v1/budgets/{category_id}?month={month}&year={year}
+ */
+export async function deleteBudgetApi(
+  categoryId: number,
+  month: number,
+  year: number
+): Promise<void> {
+  await apiClient.delete(`/budgets/${categoryId}`, {
+    params: { month, year },
+  });
+}
+

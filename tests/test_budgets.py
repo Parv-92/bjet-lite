@@ -432,3 +432,125 @@ def test_spending_breakdown_tenant_isolation(client, auth_headers):
     assert float(b_resp.json()["total_spent"]) == 0.00
     assert len(b_resp.json()["items"]) == 0
 
+
+def test_delete_budget_endpoint_success(client, auth_headers):
+    """Deleting a monthly budget via DELETE /api/v1/budgets/{category_id} removes it from summary."""
+    cat_resp = client.get("/api/v1/categories", headers=auth_headers)
+    cat_id = cat_resp.json()[0]["id"]
+    month, year = 11, 2026
+
+    # 1. Create budget
+    set_resp = client.post(
+        "/api/v1/budgets",
+        json={"category_id": cat_id, "month": month, "year": year, "amount_limit": 3500.00},
+        headers=auth_headers,
+    )
+    assert set_resp.status_code == 201
+
+    # Verify present in summary
+    summary_before = client.get(
+        f"/api/v1/budgets/summary?month={month}&year={year}",
+        headers=auth_headers,
+    ).json()
+    assert any(b["category_id"] == cat_id for b in summary_before)
+
+    # 2. Delete budget
+    del_resp = client.delete(
+        f"/api/v1/budgets/{cat_id}?month={month}&year={year}",
+        headers=auth_headers,
+    )
+    assert del_resp.status_code == 204
+
+    # 3. Verify gone from summary
+    summary_after = client.get(
+        f"/api/v1/budgets/summary?month={month}&year={year}",
+        headers=auth_headers,
+    ).json()
+    assert not any(b["category_id"] == cat_id for b in summary_after)
+
+
+def test_set_budget_zero_removes_from_monthly_summary(client, auth_headers):
+    """Setting a budget limit to 0 removes the category from that month's budget summary."""
+    cat_resp = client.get("/api/v1/categories", headers=auth_headers)
+    cat_id = cat_resp.json()[1]["id"]
+    month, year = 12, 2026
+
+    # 1. Create initial budget of 4000
+    client.post(
+        "/api/v1/budgets",
+        json={"category_id": cat_id, "month": month, "year": year, "amount_limit": 4000.00},
+        headers=auth_headers,
+    )
+    summary_1 = client.get(
+        f"/api/v1/budgets/summary?month={month}&year={year}",
+        headers=auth_headers,
+    ).json()
+    assert any(b["category_id"] == cat_id for b in summary_1)
+
+    # 2. Upsert with amount_limit: 0
+    zero_resp = client.post(
+        "/api/v1/budgets",
+        json={"category_id": cat_id, "month": month, "year": year, "amount_limit": 0.0},
+        headers=auth_headers,
+    )
+    assert zero_resp.status_code in (200, 201)
+
+    # 3. Verify category is removed from monthly budget summary
+    summary_2 = client.get(
+        f"/api/v1/budgets/summary?month={month}&year={year}",
+        headers=auth_headers,
+    ).json()
+    assert not any(b["category_id"] == cat_id for b in summary_2)
+
+
+def test_delete_budget_tenant_isolation(client, auth_headers):
+    """User B cannot delete User A's monthly budget."""
+    cat_resp = client.get("/api/v1/categories", headers=auth_headers)
+    cat_id = cat_resp.json()[0]["id"]
+    month, year = 10, 2026
+
+    # User A sets budget
+    client.post(
+        "/api/v1/budgets",
+        json={"category_id": cat_id, "month": month, "year": year, "amount_limit": 5000.00},
+        headers=auth_headers,
+    )
+
+    # User B registers & logs in
+    client.post(
+        "/api/v1/auth/register",
+        json={"email": "del_budget_b@example.com", "password": "Password123!"},
+    )
+    login_b = client.post(
+        "/api/v1/auth/login",
+        json={"email": "del_budget_b@example.com", "password": "Password123!"},
+    )
+    user_b_headers = {"Authorization": f"Bearer {login_b.json()['access_token']}"}
+
+    # User B attempts to delete User A's budget -> 404
+    del_resp = client.delete(
+        f"/api/v1/budgets/{cat_id}?month={month}&year={year}",
+        headers=user_b_headers,
+    )
+    assert del_resp.status_code == 404
+
+    # User A's budget is intact
+    summary_a = client.get(
+        f"/api/v1/budgets/summary?month={month}&year={year}",
+        headers=auth_headers,
+    ).json()
+    assert any(b["category_id"] == cat_id for b in summary_a)
+
+
+def test_delete_nonexistent_budget_returns_404(client, auth_headers):
+    """Attempting to delete a budget that does not exist returns 404."""
+    cat_resp = client.get("/api/v1/categories", headers=auth_headers)
+    cat_id = cat_resp.json()[0]["id"]
+
+    del_resp = client.delete(
+        f"/api/v1/budgets/{cat_id}?month=1&year=2030",
+        headers=auth_headers,
+    )
+    assert del_resp.status_code == 404
+
+

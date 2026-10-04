@@ -31,9 +31,13 @@ export default function TabsLayout() {
         },
         tabBarActiveTintColor: colors.brand,
         tabBarInactiveTintColor: colors.textMuted,
+        tabBarItemStyle: {
+          paddingHorizontal: 0,
+        },
         tabBarLabelStyle: {
-          fontSize: fontSizes.xs,
+          fontSize: 11,
           fontWeight: fontWeights.medium,
+          letterSpacing: -0.2,
         },
       }}
     >

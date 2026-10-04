@@ -52,9 +52,9 @@ export const RuleExplanation: React.FC<RuleExplanationProps> = ({
               <Text style={styles.stepNumberText}>1</Text>
             </View>
             <View style={styles.stepInfo}>
-              <Text style={styles.stepTitle}>Your Merchant Rules (Highest Priority)</Text>
+              <Text style={styles.stepTitle}>Your Merchant Rules</Text>
               <Text style={styles.stepDesc}>
-                Matches merchant name or UPI VPA using case-insensitive text search. Evaluated by Priority (100 highest) then newest first.
+                Matches merchant name or UPI VPA using case-insensitive text search. Evaluated before default categories.
               </Text>
             </View>
           </View>

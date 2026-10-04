@@ -9,15 +9,72 @@ import { APIError } from '../types/api';
 
 const TOKEN_KEY = 'bjet_auth_token';
 
-// Read API base URL from EXPO_PUBLIC_API_BASE_URL, default to local FastAPI dev server
-const rawBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:8000/api/v1';
-export const API_BASE_URL = rawBaseUrl.replace(/\/+$/, '');
+/**
+ * API Environment Architecture
+ *
+ * DEVELOPMENT (__DEV__ === true):
+ * - Defaults to 'http://localhost:8000/api/v1' for local FastAPI development.
+ * - Physical device testing requires USB reverse (adb reverse tcp:8000 tcp:8000).
+ *
+ * LOCAL RELEASE TESTING (EXPO_PUBLIC_ALLOW_LOCAL_RELEASE === 'true'):
+ * - Explicit opt-in for physical device release profiling against a local dev server.
+ * - Defaults to 'http://localhost:8000/api/v1'.
+ *
+ * PRODUCTION (__DEV__ === false):
+ * - Requires an explicit EXPO_PUBLIC_API_BASE_URL.
+ * - Must use HTTPS protocol.
+ * - Rejects localhost and 127.0.0.1.
+ * - Never silently falls back to localhost.
+ */
+export function resolveApiBaseUrl(): string {
+  const envUrl = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
+  const allowLocalRelease = process.env.EXPO_PUBLIC_ALLOW_LOCAL_RELEASE === 'true';
+
+  // 1. Development mode or explicit local release testing
+  if (__DEV__ || allowLocalRelease) {
+    const devUrl = envUrl || 'http://localhost:8000/api/v1';
+    return devUrl.replace(/\/+$/, '');
+  }
+
+  // 2. Production mode validation
+  if (!envUrl) {
+    throw new Error(
+      'Production API endpoint is not configured yet. Production builds require an explicit HTTPS EXPO_PUBLIC_API_BASE_URL.'
+    );
+  }
+
+  const normalized = envUrl.replace(/\/+$/, '');
+
+  if (!normalized.startsWith('https://')) {
+    throw new Error(
+      `Invalid production API URL "${normalized}": Production API endpoint must use HTTPS protocol.`
+    );
+  }
+
+  if (normalized.includes('localhost') || normalized.includes('127.0.0.1')) {
+    throw new Error(
+      `Invalid production API URL "${normalized}": Production API endpoint cannot point to localhost or loopback in production.`
+    );
+  }
+
+  return normalized;
+}
+
+export const API_BASE_URL = resolveApiBaseUrl();
+
+// In-memory token cache to prevent async JNI bridge races and stale 401 session destruction
+let inMemoryToken: string | null = null;
 
 // --- SecureStore Token Helpers ---
 
 export async function getStoredToken(): Promise<string | null> {
+  if (inMemoryToken) {
+    return inMemoryToken;
+  }
   try {
-    return await SecureStore.getItemAsync(TOKEN_KEY);
+    const token = await SecureStore.getItemAsync(TOKEN_KEY);
+    inMemoryToken = token;
+    return token;
   } catch (error) {
     console.error('Error reading token from SecureStore:', error);
     return null;
@@ -25,6 +82,8 @@ export async function getStoredToken(): Promise<string | null> {
 }
 
 export async function setStoredToken(token: string): Promise<void> {
+  inMemoryToken = token;
+  isSessionExpiring = false;
   try {
     await SecureStore.setItemAsync(TOKEN_KEY, token);
   } catch (error) {
@@ -34,6 +93,7 @@ export async function setStoredToken(token: string): Promise<void> {
 }
 
 export async function clearStoredToken(): Promise<void> {
+  inMemoryToken = null;
   try {
     await SecureStore.deleteItemAsync(TOKEN_KEY);
   } catch (error) {
@@ -157,7 +217,29 @@ apiClient.interceptors.response.use(
         pathname.endsWith('/auth/login') || pathname.endsWith('/auth/register');
 
       if (!isPublicAuthEndpoint) {
-        notifyUnauthorized();
+        // Extract the Bearer token that was actually sent with this failed request
+        const rawAuth =
+          error.config?.headers?.Authorization ||
+          error.config?.headers?.['authorization'] ||
+          (typeof error.config?.headers?.get === 'function'
+            ? error.config.headers.get('Authorization')
+            : undefined);
+
+        const requestToken =
+          typeof rawAuth === 'string'
+            ? rawAuth.replace(/^Bearer\s+/i, '').trim()
+            : undefined;
+
+        // CRITICAL RACE PREVENTION:
+        // A 401 error must only invalidate the active session if:
+        // 1. The request was actually sent WITH an authentication token.
+        // 2. The token on the failed request matches the CURRENT in-memory active token.
+        // Stale 401 responses from past sessions or requests sent without tokens must NEVER destroy a new session.
+        if (requestToken && inMemoryToken && requestToken === inMemoryToken) {
+          notifyUnauthorized();
+        } else {
+          console.warn('[API] Ignored stale or unauthenticated 401 error from:', pathname);
+        }
       }
     }
 

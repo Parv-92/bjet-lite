@@ -49,7 +49,10 @@ import {
 } from '../../src/components/receipt/StatementSummaryHeader';
 import { Button } from '../../src/components/ui/Button';
 import { Card } from '../../src/components/ui/Card';
-import { statementCandidateStore } from '../../src/services/receipt/statementCandidateStore';
+import {
+  statementCandidateStore,
+  fileLifecycleService,
+} from '../../src/services/receipt';
 import {
   statementTransactionPersistenceService,
   StatementPersistenceProgress,
@@ -92,14 +95,17 @@ export default function StatementReviewScreen() {
     hasResult: !!persistenceResult,
   });
 
-  // Block hardware back button on Android while persistence is actively executing
+
+
+  // Defensive cleanup on screen abandonment / unmount
   useEffect(() => {
-    if (!isPersisting) return;
-    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
-      return true; // Consume event, prevent back navigation
-    });
-    return () => backHandler.remove();
-  }, [isPersisting]);
+    return () => {
+      const sourceUri = statementCandidateStore.getSourceFileUri();
+      if (sourceUri) {
+        fileLifecycleService.cleanupSession(sourceUri).catch(() => {});
+      }
+    };
+  }, []);
 
   // Persistable candidates (SENT or RECEIVED reimbursement, not excluded, amount > 0, not yet persisted)
   const persistableCandidates = useMemo(
@@ -199,10 +205,23 @@ export default function StatementReviewScreen() {
     });
   }, [candidates, activeFilter]);
 
-  const handleBack = useCallback(() => {
+  const handleBack = useCallback(async () => {
     if (isPersisting) return;
+    const sourceUri = statementCandidateStore.getSourceFileUri();
+    await fileLifecycleService.cleanupSession(sourceUri);
+    statementCandidateStore.clearSession();
     router.back();
   }, [isPersisting, router]);
+
+  // Block hardware back button while persisting, or trigger handleBack on back press
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (isPersisting) return true; // Consume event, prevent back navigation while persisting
+      handleBack();
+      return true;
+    });
+    return () => backHandler.remove();
+  }, [isPersisting, handleBack]);
 
   const handleToggleInclusion = useCallback((localId: string) => {
     statementCandidateStore.toggleInclusion(localId);
@@ -246,6 +265,12 @@ export default function StatementReviewScreen() {
       queryClient.invalidateQueries({ queryKey: ['budgets', 'summary'] });
 
       setPersistenceResult(result);
+
+      // Clean up temporary source PDF immediately upon successful persistence
+      if (result.failureCount === 0 || result.successCount > 0) {
+        const sourceUri = statementCandidateStore.getSourceFileUri();
+        await fileLifecycleService.cleanupSession(sourceUri);
+      }
     } catch (err: any) {
       Alert.alert('Persistence Error', err?.message || 'Failed to persist transactions.');
     } finally {
@@ -272,6 +297,10 @@ export default function StatementReviewScreen() {
       queryClient.invalidateQueries({ queryKey: ['budgets', 'summary'] });
 
       setPersistenceResult(result);
+      if (result.failureCount === 0 || result.successCount > 0) {
+        const sourceUri = statementCandidateStore.getSourceFileUri();
+        await fileLifecycleService.cleanupSession(sourceUri);
+      }
     } catch (err: any) {
       Alert.alert('Retry Error', err?.message || 'Failed to retry failed transactions.');
     } finally {
@@ -280,15 +309,20 @@ export default function StatementReviewScreen() {
     }
   }, [queryClient]);
 
-  // View transactions: keeps statement session intact and navigates to Transactions tab
-  const handleViewTransactions = useCallback(() => {
+  // View transactions: cleans source PDF, clears statement session, and navigates to Transactions tab
+  const handleViewTransactions = useCallback(async () => {
     setPersistenceResult(null);
+    const sourceUri = statementCandidateStore.getSourceFileUri();
+    await fileLifecycleService.cleanupSession(sourceUri);
+    statementCandidateStore.clearSession();
     router.replace('/(tabs)/transactions' as any);
   }, [router]);
 
-  // Done: explicitly exits and clears statement session
-  const handleDone = useCallback(() => {
+  // Done: explicitly cleans source PDF, clears statement session, and returns to scan
+  const handleDone = useCallback(async () => {
     setPersistenceResult(null);
+    const sourceUri = statementCandidateStore.getSourceFileUri();
+    await fileLifecycleService.cleanupSession(sourceUri);
     statementCandidateStore.clearSession();
     router.replace('/(tabs)/scan' as any);
   }, [router]);
@@ -344,7 +378,7 @@ export default function StatementReviewScreen() {
           <View style={styles.appBarTitles}>
             <Text style={styles.appBarTitle}>Statement Review</Text>
             <Text style={styles.appBarSubtitle}>
-              {candidates.length} Candidates • {persistableCount} Persistable
+              {candidates.length} Candidates • {persistableCount} Can be added
             </Text>
           </View>
         </View>

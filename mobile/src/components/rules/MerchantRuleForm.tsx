@@ -12,7 +12,6 @@ import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { ErrorMessage } from '../ui/ErrorMessage';
-import { RulePriorityInput } from './RulePriorityInput';
 import { CategoryPickerModal } from '../transactions/CategoryPickerModal';
 import { CategoryIcon } from '../categories/CategoryIcon';
 import { useCategories } from '../../hooks/useCategories';
@@ -28,7 +27,7 @@ const ruleSchema = z.object({
     .max(100, 'Pattern must be 100 characters or fewer')
     .refine((val) => val.trim().length > 0, 'Pattern cannot be blank'),
   category_id: z.number({ required_error: 'Please select a category' }).min(1, 'Please select a category'),
-  priority: z.number().min(1, 'Priority must be at least 1').max(100, 'Priority cannot exceed 100'),
+  priority: z.number(),
 });
 
 export type RuleFormData = z.infer<typeof ruleSchema>;
@@ -72,7 +71,6 @@ export const MerchantRuleForm: React.FC<MerchantRuleFormProps> = ({
 
   const watchedPattern = watch('merchant_pattern');
   const watchedCategoryId = watch('category_id');
-  const watchedPriority = watch('priority');
 
   const selectedCategory = categories?.find((c) => c.id === watchedCategoryId);
 
@@ -113,8 +111,7 @@ export const MerchantRuleForm: React.FC<MerchantRuleFormProps> = ({
           {' '}will be automatically suggested as{' '}
           <Text style={styles.previewHighlight}>
             {selectedCategory ? selectedCategory.name : 'Category'}
-          </Text>
-          {' '}(Priority {watchedPriority}).
+          </Text>.
         </Text>
       </Card>
 
@@ -185,18 +182,6 @@ export const MerchantRuleForm: React.FC<MerchantRuleFormProps> = ({
         )}
       </View>
 
-      {/* Priority Selector */}
-      <Controller
-        control={control}
-        name="priority"
-        render={({ field: { onChange, value } }) => (
-          <RulePriorityInput
-            value={value}
-            onChange={onChange}
-            error={errors.priority?.message}
-          />
-        )}
-      />
 
       {/* Category Picker Modal */}
       <CategoryPickerModal

@@ -33,6 +33,7 @@ const registerSchema = z
     email: z
       .string()
       .trim()
+      .toLowerCase()
       .min(1, 'Email address is required')
       .email('Please enter a valid email address'),
     password: z.string().min(6, 'Password must be at least 6 characters'),
@@ -67,9 +68,10 @@ export default function RegisterScreen() {
   const onSubmit = async (values: RegisterFormValues) => {
     setApiError(null);
     try {
+      const normalizedEmail = values.email.trim().toLowerCase();
       // 1. Create account with backend
       await registerApi({
-        email: values.email,
+        email: normalizedEmail,
         password: values.password,
         full_name: values.full_name?.trim() ? values.full_name.trim() : undefined,
       });
@@ -77,7 +79,7 @@ export default function RegisterScreen() {
       // 2. Seamless auto-login to establish session
       try {
         const loginRes = await loginApi({
-          email: values.email,
+          email: normalizedEmail,
           password: values.password,
         });
 

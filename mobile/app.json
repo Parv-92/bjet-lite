@@ -13,7 +13,8 @@
         "expo-camera",
         {
           "cameraPermission": "Allow Bjet to access the camera to scan receipts.",
-          "recordAudioAndroid": false
+          "recordAudioAndroid": false,
+          "barcodeScannerEnabled": false
         }
       ]
     ],

@@ -105,5 +105,40 @@ class ExpoPdfRendererModule : Module() {
         false
       }
     }
+
+    AsyncFunction("sanitizeTemporaryFiles") { olderThanMs: Long ->
+      var deletedCount = 0
+      try {
+        val context = appContext.reactContext ?: return@AsyncFunction 0
+        val now = System.currentTimeMillis()
+        val cutoffTime = if (olderThanMs > 0) now - olderThanMs else now
+
+        // 1. Scan cache/DocumentPicker for Bjet imported PDFs
+        val docPickerDir = File(context.cacheDir, "DocumentPicker")
+        if (docPickerDir.exists() && docPickerDir.isDirectory) {
+          docPickerDir.listFiles()?.forEach { file ->
+            val name = file.name.lowercase()
+            if (name.endsWith(".pdf") && file.lastModified() <= cutoffTime) {
+              if (file.delete()) {
+                deletedCount++
+              }
+            }
+          }
+        }
+
+        // 2. Scan cache for rendered PDF pages (pdf_page_*.png)
+        context.cacheDir.listFiles()?.forEach { file ->
+          val name = file.name
+          if (name.startsWith("pdf_page_") && name.endsWith(".png") && file.lastModified() <= cutoffTime) {
+            if (file.delete()) {
+              deletedCount++
+            }
+          }
+        }
+      } catch (e: Exception) {
+        // Defensive: never throw or crash
+      }
+      deletedCount
+    }
   }
 }

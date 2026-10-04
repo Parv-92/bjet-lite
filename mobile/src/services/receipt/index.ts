@@ -19,3 +19,4 @@ export * from './extractors/ImageOCRExtractor';
 export * from './ocr/OcrProvider';
 export * from './qualityHeuristic';
 export * from './normalization';
+export * from './fileLifecycleService';

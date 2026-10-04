@@ -10,7 +10,7 @@ class BudgetBase(BaseModel):
     category_id: int
     month: int = Field(..., ge=1, le=12, description="Month of the year (1-12)")
     year: int = Field(..., ge=2000, le=2100, description="Year (e.g. 2026)")
-    amount_limit: Decimal = Field(..., gt=0, description="Budget limit amount")
+    amount_limit: Decimal = Field(..., ge=0, description="Budget limit amount")
 
 
 class BudgetCreate(BudgetBase):
@@ -18,7 +18,7 @@ class BudgetCreate(BudgetBase):
 
 
 class BudgetUpdate(BaseModel):
-    amount_limit: Decimal = Field(..., gt=0)
+    amount_limit: Decimal = Field(..., ge=0)
 
 
 class BudgetResponse(BudgetBase):

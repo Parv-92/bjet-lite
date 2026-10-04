@@ -144,6 +144,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // Log in user with newly obtained token and hydrate user profile:
   const login = useCallback(async (newToken: string) => {
     try {
+      resetSessionExpiring();
       await setStoredToken(newToken);
       setToken(newToken);
 

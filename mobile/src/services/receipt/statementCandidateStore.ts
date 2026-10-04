@@ -19,13 +19,16 @@ class StatementCandidateStore {
   private candidates: TransactionCandidate[] = [];
   private metadata: StatementMetadata | undefined = undefined;
   private warnings: string[] = [];
+  private sourceFileUri: string | undefined = undefined;
   private listeners: Set<() => void> = new Set();
 
   public setSession(
     candidates: TransactionCandidate[],
     metadata?: StatementMetadata,
-    warnings?: string[]
+    warnings?: string[],
+    sourceFileUri?: string
   ) {
+    this.sourceFileUri = sourceFileUri;
     this.candidates = candidates.map(c => {
       const isDuplicate = !!c.duplicateInfo?.isDuplicate;
       // Duplicates are excluded by default.
@@ -57,6 +60,10 @@ class StatementCandidateStore {
 
   public getWarnings(): string[] {
     return this.warnings;
+  }
+
+  public getSourceFileUri(): string | undefined {
+    return this.sourceFileUri;
   }
 
   public updateCandidate(localId: string, updated: TransactionCandidate) {
@@ -181,6 +188,7 @@ class StatementCandidateStore {
     this.candidates = [];
     this.metadata = undefined;
     this.warnings = [];
+    this.sourceFileUri = undefined;
     this.notify();
   }
 

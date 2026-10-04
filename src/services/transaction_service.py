@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import List, Optional
+from sqlalchemy import extract
 from sqlalchemy.orm import Session
 
 from src.core.exceptions import NotFoundError, TransactionNotFoundError, ValidationError
@@ -292,17 +293,46 @@ class TransactionService:
             raise NotFoundError(f"Transaction(s) {sorted(list(missing_ids))} not found or not accessible.")
 
         # Financial consistency check for deletions:
-        # Deleting outgoing expenses must not leave any category with negative net spending
+        # Atomic evaluation of complete resulting database state after removing all selected transactions.
+        delete_ids_set = set(transaction_ids)
         affected_periods = set()
         for t in transactions:
-            if t.category_id and t.direction == "SENT" and t.status in (TransactionStatus.CONFIRMED, TransactionStatus.MANUAL):
+            t_status = t.status.value if hasattr(t.status, "value") else str(t.status)
+            if t.category_id and t_status in ("CONFIRMED", "MANUAL"):
                 affected_periods.add((t.category_id, t.timestamp.month, t.timestamp.year))
 
         for cat_id, m, y in affected_periods:
-            projected_net = calculate_category_net_spending(
-                db, user_id, cat_id, m, y, excluding_transaction_ids=transaction_ids
+            period_txs = (
+                db.query(Transaction)
+                .filter(
+                    Transaction.user_id == user_id,
+                    Transaction.category_id == cat_id,
+                    Transaction.status.in_([TransactionStatus.CONFIRMED, TransactionStatus.MANUAL]),
+                    extract("month", Transaction.timestamp) == m,
+                    extract("year", Transaction.timestamp) == y,
+                )
+                .all()
             )
-            if projected_net < Decimal("0.00"):
+
+            # Filter to transactions that REMAIN after atomic deletion
+            remaining_txs = [tx for tx in period_txs if tx.id not in delete_ids_set]
+
+            # 1. Post-deletion SENT spending (Gross Outgoing Expenses)
+            post_deletion_spending = Decimal("0.00")
+            for tx in remaining_txs:
+                if tx.direction == "SENT" or tx.direction is None:
+                    amount = Decimal(str(tx.amount))
+                    paid_other = Decimal(str(tx.amount_paid_for_someone_else or 0))
+                    post_deletion_spending += (amount - paid_other)
+
+            # 2. Post-deletion RECEIVED reimbursements (ONLY reimbursements that remain after deletion)
+            post_deletion_reimbursements = Decimal("0.00")
+            for tx in remaining_txs:
+                if tx.direction == "RECEIVED" and tx.is_reimbursement:
+                    post_deletion_reimbursements += Decimal(str(tx.amount))
+
+            # 3. Validate reimbursement <= resulting category spending
+            if post_deletion_reimbursements > post_deletion_spending:
                 raise ValidationError(
                     "Cannot delete transaction(s) because existing reimbursements exceed the resulting category spending."
                 )

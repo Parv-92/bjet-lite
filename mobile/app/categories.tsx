@@ -85,7 +85,7 @@ export default function CategoriesScreen() {
 
     Alert.alert(
       'Delete this category?',
-      `Are you sure you want to delete "${category.name}"?\n\nTransactions and budgets are not deleted. The category can only be removed if the backend allows it.`,
+      `Are you sure you want to delete "${category.name}"?\n\nAny monthly budget limits for this category will also be removed. Categories referenced by transactions, presets, rules, or friends cannot be deleted.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -122,7 +122,7 @@ export default function CategoriesScreen() {
             <ChevronLeft color={colors.text} size={24} />
           </TouchableOpacity>
           <View>
-            <Text style={styles.title}>Bjet Categories</Text>
+            <Text style={styles.title}>Categories</Text>
             <Text style={styles.subtitle}>Manage custom & system categories</Text>
           </View>
         </View>

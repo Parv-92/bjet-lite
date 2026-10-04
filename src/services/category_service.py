@@ -9,6 +9,8 @@ from src.core.exceptions import (
 )
 from src.models.budget import Budget
 from src.models.category import Category
+from src.models.friend import Friend
+from src.models.preset import BudgetPresetItem
 from src.models.rule import UserMerchantRule
 from src.models.transaction import Transaction
 from src.repositories.category_repo import category_repo
@@ -78,21 +80,37 @@ class CategoryService:
         if category.user_id != user_id:
             raise CategoryNotFoundError(f"Category with ID {category_id} not found.")
 
-        # Restrict deletion: check if category is referenced by transactions, budgets, or merchant rules
+        # Restrict deletion: check if category is referenced by transactions, presets, merchant rules, or friends
         has_transactions = (
             db.query(Transaction.id).filter(Transaction.category_id == category.id).first() is not None
         )
-        has_budgets = (
-            db.query(Budget.id).filter(Budget.category_id == category.id).first() is not None
+        has_presets = (
+            db.query(BudgetPresetItem.id).filter(BudgetPresetItem.category_id == category.id).first() is not None
         )
         has_rules = (
             db.query(UserMerchantRule.id).filter(UserMerchantRule.category_id == category.id).first() is not None
         )
+        has_friends = (
+            db.query(Friend.id).filter(Friend.category_id == category.id).first() is not None
+        )
 
-        if has_transactions or has_budgets or has_rules:
+        reasons = []
+        if has_transactions:
+            reasons.append("existing transactions")
+        if has_presets:
+            reasons.append("budget presets")
+        if has_rules:
+            reasons.append("merchant rules")
+        if has_friends:
+            reasons.append("friend reimbursement settings")
+
+        if reasons:
             raise ValidationError(
-                "Category cannot be deleted because it is currently used by existing transactions, budgets, or merchant rules."
+                f"Category cannot be deleted because it is currently used by: {', '.join(reasons)}."
             )
+
+        # Cascade-delete any monthly budget targets for this category
+        db.query(Budget).filter(Budget.category_id == category.id).delete(synchronize_session=False)
 
         category_repo.delete(db, category=category)
 

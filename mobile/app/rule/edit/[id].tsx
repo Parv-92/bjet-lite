@@ -67,7 +67,7 @@ export default function EditRuleScreen() {
         </TouchableOpacity>
         <View>
           <Text style={styles.title}>Edit Merchant Rule</Text>
-          <Text style={styles.subtitle}>Update rule pattern, category, or priority</Text>
+          <Text style={styles.subtitle}>Update rule pattern or category</Text>
         </View>
       </View>
 

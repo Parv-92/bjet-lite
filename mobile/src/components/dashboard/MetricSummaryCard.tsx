@@ -48,7 +48,7 @@ export const MetricSummaryCard: React.FC<MetricSummaryCardProps> = ({
             {monthName} {year}
           </Text>
           <Text style={styles.mainAmount}>{formatCurrency(totalSpent)}</Text>
-          <Text style={styles.subtext}>Total Monthly Spending</Text>
+          <Text style={styles.subtext}>Monthly Budget Spending</Text>
         </View>
 
         {isOverBudget ? (

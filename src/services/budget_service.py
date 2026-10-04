@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+from decimal import Decimal
 from typing import List, Optional
 from sqlalchemy.orm import Session
 
@@ -16,7 +18,54 @@ class BudgetService:
         if not category:
             raise NotFoundError(f"Category with ID {budget_in.category_id} not found or not accessible.")
 
+        if budget_in.amount_limit == Decimal("0"):
+            # Setting to 0 removes the budget record for that period
+            existing = budget_repo.get_by_category_and_period(
+                db, user_id, budget_in.category_id, budget_in.month, budget_in.year
+            )
+            if existing:
+                existing_id = existing.id
+                created_at = existing.created_at
+                budget_repo.delete(db, existing)
+                placeholder = Budget(
+                    id=existing_id,
+                    user_id=user_id,
+                    category_id=budget_in.category_id,
+                    month=budget_in.month,
+                    year=budget_in.year,
+                    amount_limit=Decimal("0.00"),
+                    created_at=created_at,
+                    updated_at=datetime.now(timezone.utc),
+                )
+                placeholder.category = category
+                return placeholder, False
+            else:
+                placeholder = Budget(
+                    id=0,
+                    user_id=user_id,
+                    category_id=budget_in.category_id,
+                    month=budget_in.month,
+                    year=budget_in.year,
+                    amount_limit=Decimal("0.00"),
+                    created_at=datetime.now(timezone.utc),
+                    updated_at=datetime.now(timezone.utc),
+                )
+                placeholder.category = category
+                return placeholder, False
+
         return budget_repo.create_or_update(db, user_id, budget_in)
+
+    def delete_budget(
+        self, db: Session, user_id: int, category_id: int, month: int, year: int
+    ) -> bool:
+        category = category_repo.get_by_id_for_user(db, category_id, user_id)
+        if not category:
+            raise NotFoundError(f"Category with ID {category_id} not found or not accessible.")
+
+        deleted = budget_repo.delete_by_category_and_period(db, user_id, category_id, month, year)
+        if not deleted:
+            raise NotFoundError("Budget not found for this category and period.")
+        return True
 
     def get_monthly_budgets(
         self, db: Session, user_id: int, month: int, year: int

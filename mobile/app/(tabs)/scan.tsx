@@ -15,7 +15,6 @@ import {
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-import { cleanupPdfPageImage } from 'expo-pdf-page-renderer';
 import {
   Camera,
   Images,
@@ -44,6 +43,7 @@ import {
   CancellationToken,
   ReceiptInterpretationService,
   statementCandidateStore,
+  fileLifecycleService,
 } from '../../src/services/receipt';
 import { useReceiptUpload } from '../../src/hooks/useReceiptUpload';
 import { useMerchantRules } from '../../src/hooks/useMerchantRules';
@@ -100,15 +100,8 @@ export default function ScanScreen() {
       setValidationError(validation.error || 'Invalid file selected.');
       return;
     }
-    // Clean up previous temporary DocumentPicker cached file if replaced
-    if (
-      selectedFile &&
-      selectedFile.uri !== file.uri &&
-      selectedFile.source === 'document' &&
-      selectedFile.uri.includes('DocumentPicker')
-    ) {
-      cleanupPdfPageImage(selectedFile.uri).catch(() => {});
-    }
+    // Centralized lifecycle: register active source file and safely auto-clean previous file if replaced
+    fileLifecycleService.registerSourceFile(file.uri).catch(() => {});
     setValidationError(null);
     setSelectedFile(file);
   };
@@ -206,6 +199,7 @@ export default function ScanScreen() {
     setServerError(null);
     setValidationError(null);
     setIsExtracting(true);
+    fileLifecycleService.setProcessing(true);
     setExtractionProgress({ step: 'preparing', message: 'Starting extraction...' });
 
     const token: CancellationToken = { aborted: false };
@@ -242,6 +236,7 @@ export default function ScanScreen() {
       }
     } finally {
       setIsExtracting(false);
+      fileLifecycleService.setProcessing(false);
       setExtractionProgress(null);
       setCancellationTokenState(null);
     }
@@ -272,17 +267,22 @@ export default function ScanScreen() {
         statementCandidateStore.setSession(
           parsed.candidates,
           parsed.statementMetadata,
-          parsed.warnings
+          parsed.warnings,
+          selectedFile?.uri
         );
         setExtractionModalVisible(false);
         router.push('/receipt-review/statement' as any);
       } else {
+        await fileLifecycleService.cleanupActiveSourceFile().catch(() => {});
+        setSelectedFile(null);
         Alert.alert(
           'No Candidates Detected',
           'Could not segment individual transaction candidates from the document text.'
         );
       }
     } catch (err: any) {
+      await fileLifecycleService.cleanupActiveSourceFile().catch(() => {});
+      setSelectedFile(null);
       Alert.alert(
         'Interpretation Error',
         err?.message || 'Failed to interpret transaction candidates.'
@@ -294,13 +294,7 @@ export default function ScanScreen() {
     if (cancellationToken) {
       cancellationToken.aborted = true;
     }
-    if (
-      selectedFile &&
-      selectedFile.source === 'document' &&
-      selectedFile.uri.includes('DocumentPicker')
-    ) {
-      cleanupPdfPageImage(selectedFile.uri).catch(() => {});
-    }
+    fileLifecycleService.cleanupActiveSourceFile().catch(() => {});
     setSelectedFile(null);
     setValidationError(null);
     setServerError(null);

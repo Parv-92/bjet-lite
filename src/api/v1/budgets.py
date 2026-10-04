@@ -103,3 +103,28 @@ def get_category_budget_status(
         )
     return summary
 
+
+@router.delete("/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_category_budget(
+    category_id: int,
+    month: int = Query(..., ge=1, le=12, description="Month (1-12)"),
+    year: int = Query(..., ge=2000, le=2100, description="Year (e.g. 2026)"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Delete a category budget for a specific month and year."""
+    try:
+        budget_service.delete_budget(
+            db=db,
+            user_id=current_user.id,
+            category_id=category_id,
+            month=month,
+            year=year,
+        )
+    except NotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+
+

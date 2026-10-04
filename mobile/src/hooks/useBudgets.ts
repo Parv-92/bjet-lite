@@ -17,6 +17,7 @@ import {
   getCategoryBudgetStatusApi,
   getMonthlySpendingBreakdownApi,
   setBudgetApi,
+  deleteBudgetApi,
 } from '../api/budgets';
 import { Budget, BudgetSummary, MonthlySpendingBreakdown, SetBudgetRequest } from '../types/api';
 import { useAuth } from './useAuth';
@@ -97,3 +98,26 @@ export function useSetBudget() {
     },
   });
 }
+
+/**
+ * Hook to delete/remove a category budget for a specific month and year.
+ */
+export function useDeleteBudget() {
+  const queryClient = useQueryClient();
+
+  return useMutation<void, Error, { category_id: number; month: number; year: number }>({
+    mutationFn: ({ category_id, month, year }) => deleteBudgetApi(category_id, month, year),
+    onSuccess: (_data, variables) => {
+      // Invalidate the broader summary family: automatically updates Dashboard and all monthly lists
+      queryClient.invalidateQueries({ queryKey: ['budgets', 'summary'] });
+      queryClient.invalidateQueries({
+        queryKey: ['budgets', 'spending-breakdown', variables.month, variables.year],
+      });
+      // Invalidate specific category budget status
+      queryClient.invalidateQueries({
+        queryKey: ['budgets', variables.category_id, variables.month, variables.year],
+      });
+    },
+  });
+}
+

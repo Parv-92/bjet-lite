@@ -52,10 +52,10 @@ export const BudgetSummaryCard: React.FC<BudgetSummaryCardProps> = ({
       <View style={styles.headerRow}>
         <View style={styles.titleWithIcon}>
           <TrendingUp color={colors.brandLight} size={18} />
-          <Text style={styles.title}>Overall Budget</Text>
+          <Text style={styles.title}>Budgeted Spending</Text>
         </View>
         <Text style={styles.budgetCountText}>
-          {budgetCount} {budgetCount === 1 ? 'category' : 'categories'}
+          {budgetCount} {budgetCount === 1 ? 'budgeted category' : 'budgeted categories'}
         </Text>
       </View>
 

@@ -52,10 +52,6 @@ export const MerchantRuleCard: React.FC<MerchantRuleCardProps> = ({
             </Text>
           </View>
         </View>
-
-        <View style={styles.priorityBadge}>
-          <Text style={styles.priorityText}>P: {rule.priority}</Text>
-        </View>
       </View>
 
       {/* Subtitle explanation */}
@@ -66,7 +62,7 @@ export const MerchantRuleCard: React.FC<MerchantRuleCardProps> = ({
       {/* Footer Row: Action Controls */}
       <View style={styles.footerRow}>
         <Text style={styles.metaText}>
-          Priority {rule.priority} · Evaluated before defaults
+          Evaluated before default categories
         </Text>
 
         <View style={styles.actions}>

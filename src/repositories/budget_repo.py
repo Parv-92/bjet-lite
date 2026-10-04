@@ -149,6 +149,21 @@ class BudgetRepository(BaseRepository[Budget]):
         db.refresh(budget)
         return budget
 
+    def delete(self, db: Session, budget: Budget) -> None:
+        """Delete an existing budget record."""
+        db.delete(budget)
+        db.commit()
+
+    def delete_by_category_and_period(
+        self, db: Session, user_id: int, category_id: int, month: int, year: int
+    ) -> bool:
+        """Delete a budget record matching user, category, month, and year."""
+        budget = self.get_by_category_and_period(db, user_id, category_id, month, year)
+        if not budget:
+            return False
+        self.delete(db, budget)
+        return True
+
     def get_spent_amount(
         self, db: Session, user_id: int, category_id: int, month: int, year: int
     ) -> Decimal:

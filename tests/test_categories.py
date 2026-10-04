@@ -164,7 +164,7 @@ def test_category_user_isolation(client, auth_headers):
 
 
 def test_delete_referenced_category_fails_with_400(client, auth_headers):
-    """Option A: Category deletion must be rejected with 400 if referenced by transactions, budgets, or rules."""
+    """Category deletion must be rejected with 400 if referenced by transactions, presets, rules, or friends."""
     # 1. Create custom category
     cat_resp = client.post(
         "/api/v1/categories",
@@ -174,7 +174,7 @@ def test_delete_referenced_category_fails_with_400(client, auth_headers):
     assert cat_resp.status_code == 201
     cat_id = cat_resp.json()["id"]
 
-    # 2. Add transaction referencing this category
+    # 2. Add transaction referencing this category -> 400
     tx_resp = client.post(
         "/api/v1/transactions",
         json={"amount": 1500.00, "merchant_raw_name": "Gold's Gym", "category_id": cat_id},
@@ -183,28 +183,96 @@ def test_delete_referenced_category_fails_with_400(client, auth_headers):
     assert tx_resp.status_code == 201
     tx_id = tx_resp.json()["id"]
 
-    # 3. Attempt to delete category -> 400 Bad Request
     del_resp = client.delete(f"/api/v1/categories/{cat_id}", headers=auth_headers)
     assert del_resp.status_code == 400
     assert "cannot be deleted" in del_resp.json()["detail"].lower()
+    assert "existing transactions" in del_resp.json()["detail"].lower()
 
-    # 4. Remove transaction and set a budget for the category
+    # 3. Remove transaction and add a merchant rule referencing the category -> 400
     client.delete(f"/api/v1/transactions/{tx_id}", headers=auth_headers)
+    rule_resp = client.post(
+        "/api/v1/rules",
+        json={"merchant_pattern": "FITNESS", "category_id": cat_id, "priority": 1},
+        headers=auth_headers,
+    )
+    rule_id = rule_resp.json()["id"]
+
+    del_resp2 = client.delete(f"/api/v1/categories/{cat_id}", headers=auth_headers)
+    assert del_resp2.status_code == 400
+    assert "merchant rules" in del_resp2.json()["detail"].lower()
+
+    # 4. Remove rule and add a preset referencing the category -> 400
+    client.delete(f"/api/v1/rules/{rule_id}", headers=auth_headers)
+    preset_resp = client.post(
+        "/api/v1/budget-presets",
+        json={"name": "Fitness Preset", "items": [{"category_id": cat_id, "amount": 3000.00}]},
+        headers=auth_headers,
+    )
+    preset_id = preset_resp.json()["id"]
+
+    del_resp3 = client.delete(f"/api/v1/categories/{cat_id}", headers=auth_headers)
+    assert del_resp3.status_code == 400
+    assert "budget presets" in del_resp3.json()["detail"].lower()
+
+    # 5. Remove preset and add a friend referencing the category -> 400
+    client.delete(f"/api/v1/budget-presets/{preset_id}", headers=auth_headers)
+    friend_resp = client.post(
+        "/api/v1/friends",
+        json={"name": "Gym Buddy", "recognized_name": "Buddy", "category_id": cat_id},
+        headers=auth_headers,
+    )
+    friend_id = friend_resp.json()["id"]
+
+    del_resp4 = client.delete(f"/api/v1/categories/{cat_id}", headers=auth_headers)
+    assert del_resp4.status_code == 400
+    assert "friend reimbursement" in del_resp4.json()["detail"].lower()
+
+    # Clean up friend
+    client.delete(f"/api/v1/friends/{friend_id}", headers=auth_headers)
+
+
+def test_delete_category_with_budgets_succeeds_and_cascades(client, auth_headers):
+    """A category with no transactions, presets, rules, or friends CAN be deleted even if it has budgets.
+    
+    The monthly budgets are cascade-deleted along with the category.
+    """
+    # 1. Create custom category
+    cat_resp = client.post(
+        "/api/v1/categories",
+        json={"name": "Special Project"},
+        headers=auth_headers,
+    )
+    assert cat_resp.status_code == 201
+    cat_id = cat_resp.json()["id"]
+
+    # 2. Set monthly budgets for this category in Month 8 and Month 9
+    client.post(
+        "/api/v1/budgets",
+        json={"category_id": cat_id, "month": 8, "year": 2026, "amount_limit": 1500.00},
+        headers=auth_headers,
+    )
     client.post(
         "/api/v1/budgets",
         json={"category_id": cat_id, "month": 9, "year": 2026, "amount_limit": 2000.00},
         headers=auth_headers,
     )
 
-    # Attempt delete -> 400 Bad Request (referenced by budget)
-    del_resp2 = client.delete(f"/api/v1/categories/{cat_id}", headers=auth_headers)
-    assert del_resp2.status_code == 400
+    # Verify both budgets appear in their respective summaries
+    summary_8 = client.get("/api/v1/budgets/summary?month=8&year=2026", headers=auth_headers).json()
+    assert any(b["category_id"] == cat_id for b in summary_8)
+    summary_9 = client.get("/api/v1/budgets/summary?month=9&year=2026", headers=auth_headers).json()
+    assert any(b["category_id"] == cat_id for b in summary_9)
 
-    # 5. Add a rule referencing the category
-    client.post(
-        "/api/v1/rules",
-        json={"merchant_pattern": "FITNESS", "category_id": cat_id, "priority": 1},
-        headers=auth_headers,
-    )
-    del_resp3 = client.delete(f"/api/v1/categories/{cat_id}", headers=auth_headers)
-    assert del_resp3.status_code == 400
+    # 3. Delete category -> Must SUCCEED (204 No Content)
+    del_resp = client.delete(f"/api/v1/categories/{cat_id}", headers=auth_headers)
+    assert del_resp.status_code == 204
+
+    # 4. Verify category is gone
+    assert client.get(f"/api/v1/categories/{cat_id}", headers=auth_headers).status_code == 404
+
+    # 5. Verify budgets are cascade-deleted from both months
+    summary_8_after = client.get("/api/v1/budgets/summary?month=8&year=2026", headers=auth_headers).json()
+    assert not any(b["category_id"] == cat_id for b in summary_8_after)
+    summary_9_after = client.get("/api/v1/budgets/summary?month=9&year=2026", headers=auth_headers).json()
+    assert not any(b["category_id"] == cat_id for b in summary_9_after)
+

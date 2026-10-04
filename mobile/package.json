@@ -4,6 +4,7 @@
   "main": "expo-router/entry",
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",
+    "@shopify/flash-list": "^1.7.3",
     "@tanstack/react-query": "^5.56.2",
     "axios": "^1.7.7",
     "expo": "~57.0.20",
@@ -12,20 +13,18 @@
     "expo-document-picker": "~57.0.1",
     "expo-image-picker": "~57.0.16",
     "expo-linking": "~57.0.9",
+    "expo-pdf-page-renderer": "file:modules/expo-pdf-page-renderer",
     "expo-router": "~57.0.19",
     "expo-secure-store": "~57.0.3",
-    "expo-status-bar": "~57.0.1",
+    "expo-text-extractor": "file:modules/expo-text-extractor",
     "lucide-react-native": "^0.469.0",
+    "pdfjs-dist": "5.4.296",
     "react": "19.2.3",
     "react-hook-form": "^7.53.0",
     "react-native": "0.86.3",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.0",
     "react-native-svg": "15.15.4",
-    "pdfjs-dist": "5.4.296",
-    "expo-text-extractor": "file:modules/expo-text-extractor",
-    "expo-pdf-page-renderer": "file:modules/expo-pdf-page-renderer",
-    "@shopify/flash-list": "^1.7.3",
     "zod": "^3.23.8"
   },
   "devDependencies": {
@@ -33,6 +32,7 @@
     "typescript": "~6.0.3"
   },
   "scripts": {
+    "postinstall": "node scripts/patch_pdfjs_hermes.js",
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",

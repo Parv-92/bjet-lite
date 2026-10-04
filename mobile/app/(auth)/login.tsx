@@ -25,6 +25,7 @@ const loginSchema = z.object({
   email: z
     .string()
     .trim()
+    .toLowerCase()
     .min(1, 'Email address is required')
     .email('Please enter a valid email address'),
   password: z.string().min(1, 'Password is required'),
@@ -52,8 +53,9 @@ export default function LoginScreen() {
   const onSubmit = async (values: LoginFormValues) => {
     setApiError(null);
     try {
+      const normalizedEmail = values.email.trim().toLowerCase();
       const response = await loginApi({
-        email: values.email,
+        email: normalizedEmail,
         password: values.password,
       });
 

@@ -17,6 +17,7 @@ import { spacing } from '../src/theme/spacing';
 import { fontSizes, fontWeights } from '../src/theme/typography';
 import { LoadingSpinner } from '../src/components/ui/LoadingSpinner';
 import { Button } from '../src/components/ui/Button';
+import { fileLifecycleService } from '../src/services/receipt';
 
 function RouteGuard({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading, sessionError, retrySessionRestore, logout } = useAuth();
@@ -74,6 +75,13 @@ function RouteGuard({ children }: { children: React.ReactNode }) {
 }
 
 export default function RootLayout() {
+  useEffect(() => {
+    // Startup sanitation sweep for stale Bjet temporary import artifacts (> 30 minutes)
+    fileLifecycleService.sanitizeOrphans(30 * 60 * 1000).catch(err => {
+      console.warn('[FileLifecycle] Startup sanitation warning:', err);
+    });
+  }, []);
+
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
