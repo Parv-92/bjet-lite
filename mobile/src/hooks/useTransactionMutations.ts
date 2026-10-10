@@ -5,6 +5,7 @@
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { transactionRepository } from '../repositories';
+import { triggerAutoBackup } from '../services/backup';
 import type {
   CreateManualTransactionRequest,
   UpdateTransactionRequest,
@@ -21,6 +22,7 @@ export function useCreateTransaction() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       queryClient.invalidateQueries({ queryKey: ['budgets', 'summary'] });
+      triggerAutoBackup({ reason: 'create transaction' });
     },
   });
 }
@@ -42,6 +44,7 @@ export function useUpdateTransaction() {
         queryClient.invalidateQueries({ queryKey: ['rules'] });
         queryClient.invalidateQueries({ queryKey: ['merchants'] });
       }
+      triggerAutoBackup({ reason: 'update transaction' });
     },
   });
 }
@@ -55,6 +58,7 @@ export function useDeleteTransaction() {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       queryClient.removeQueries({ queryKey: ['transactions', id] });
       queryClient.invalidateQueries({ queryKey: ['budgets', 'summary'] });
+      triggerAutoBackup({ reason: 'delete transaction' });
     },
   });
 }
@@ -71,6 +75,7 @@ export function useBulkDeleteTransactions() {
       }
       queryClient.invalidateQueries({ queryKey: ['budgets'] });
       queryClient.invalidateQueries({ queryKey: ['categories'] });
+      triggerAutoBackup({ reason: 'bulk delete transactions' });
     },
   });
 }

@@ -2,14 +2,15 @@
  * Bjet Mobile - Settings Screen
  * Displays authenticated user profile, app metadata, category management link, and logout trigger.
  */
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
-import { FolderTree, ChevronRight, Sliders, Users, BookmarkCheck } from 'lucide-react-native';
+import { FolderTree, ChevronRight, Sliders, Users, BookmarkCheck, ShieldCheck } from 'lucide-react-native';
 import { ScreenContainer } from '../../src/components/common/ScreenContainer';
 import { Card } from '../../src/components/ui/Card';
 import { Button } from '../../src/components/ui/Button';
 import { useAuth } from '../../src/hooks/useAuth';
+import { performBackup, getLatestBackup, type BackupFileEntry } from '../../src/services/backup';
 import { colors } from '../../src/theme/colors';
 import { spacing, radii } from '../../src/theme/spacing';
 import { fontSizes, fontWeights } from '../../src/theme/typography';
@@ -18,14 +19,39 @@ export default function SettingsScreen() {
   const router = useRouter();
   const { user, logout } = useAuth();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [latestBackup, setLatestBackup] = useState<BackupFileEntry | null>(null);
+  const [isBackingUp, setIsBackingUp] = useState(false);
+  const [backupMessage, setBackupMessage] = useState<string | null>(null);
 
-  const handleLogout = async () => {
+  useEffect(() => {
+    getLatestBackup().then((b) => setLatestBackup(b)).catch(() => {});
+  }, []);
+
+  const handleManualBackup = async () => {
+    setIsBackingUp(true);
+    setBackupMessage(null);
+    try {
+      const res = await performBackup();
+      if (res.success && res.filename) {
+        setBackupMessage(`Saved: ${res.filename}`);
+        const updated = await getLatestBackup();
+        setLatestBackup(updated);
+      } else {
+        setBackupMessage(res.error || 'Backup could not be completed');
+      }
+    } catch (e: any) {
+      setBackupMessage(e?.message || 'Backup failed');
+    } finally {
+      setIsBackingUp(false);
+    }
+  };
+
+  const handleResetCache = async () => {
     setIsLoggingOut(true);
     try {
       await logout();
-      router.replace('/(auth)/login');
     } catch (error) {
-      console.error('Failed to log out:', error);
+      console.error('Failed to reset cache:', error);
     } finally {
       setIsLoggingOut(false);
     }
@@ -45,19 +71,20 @@ export default function SettingsScreen() {
 
         <View style={styles.infoRow}>
           <Text style={styles.label}>Full Name</Text>
-          <Text style={styles.value}>{user?.full_name || 'Not provided'}</Text>
+          <Text style={styles.value}>{user?.full_name || 'Bjet Lite User'}</Text>
         </View>
 
         <View style={styles.infoRow}>
           <Text style={styles.label}>Email Address</Text>
-          <Text style={styles.value}>{user?.email || 'N/A'}</Text>
+          <Text style={styles.value}>{user?.email || 'local@bjet.lite'}</Text>
         </View>
 
         <View style={styles.infoRow}>
           <Text style={styles.label}>User ID</Text>
-          <Text style={styles.value}>{user?.id ? `#${user.id}` : 'N/A'}</Text>
+          <Text style={styles.value}>Local (#1)</Text>
         </View>
       </Card>
+
 
       {/* Preferences & Data Management */}
       <Card style={styles.card}>
@@ -148,15 +175,59 @@ export default function SettingsScreen() {
         </TouchableOpacity>
       </Card>
 
+      {/* Data Safety & Backups */}
+      <Card style={styles.card}>
+        <View style={styles.cardHeaderWithIcon}>
+          <ShieldCheck size={20} color={colors.brandLight} style={{ marginRight: spacing.xs }} />
+          <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Local Data Backups</Text>
+        </View>
+
+        <View style={[styles.infoRow, { marginTop: spacing.md }]}>
+          <Text style={styles.label}>Automatic Backup</Text>
+          <Text style={[styles.value, { color: colors.brandLight }]}>
+            Active (Auto-saves on transaction & budget updates)
+          </Text>
+        </View>
+
+        <View style={styles.infoRow}>
+          <Text style={styles.label}>Latest Local Backup</Text>
+          <Text style={styles.value}>
+            {latestBackup
+              ? `${latestBackup.filename} (${(latestBackup.size / 1024).toFixed(1)} KB)`
+              : 'Auto-created on next transaction or budget update'}
+          </Text>
+        </View>
+
+        {backupMessage && (
+          <Text
+            style={[
+              styles.backupFeedback,
+              backupMessage.startsWith('Saved') ? styles.backupSuccess : styles.backupError,
+            ]}
+          >
+            {backupMessage}
+          </Text>
+        )}
+
+        <Button
+          title={isBackingUp ? 'Creating Backup...' : 'Create Backup Now'}
+          onPress={handleManualBackup}
+          variant="outline"
+          loading={isBackingUp}
+          disabled={isBackingUp}
+          style={{ marginTop: spacing.xs }}
+        />
+      </Card>
+
       <Card style={styles.card}>
         <Text style={styles.sectionTitle}>Application Info</Text>
         <View style={styles.infoRow}>
           <Text style={styles.label}>Application</Text>
-          <Text style={styles.value}>Bjet Mobile</Text>
+          <Text style={styles.value}>Bjet Lite</Text>
         </View>
         <View style={styles.infoRow}>
           <Text style={styles.label}>Version</Text>
-          <Text style={styles.value}>1.0.0 (API v0.3.0)</Text>
+          <Text style={styles.value}>1.0.0 (Offline-First)</Text>
         </View>
         <View style={styles.infoRow}>
           <Text style={styles.label}>Design Theme</Text>
@@ -165,14 +236,15 @@ export default function SettingsScreen() {
       </Card>
 
       <Button
-        title="Log Out"
-        onPress={handleLogout}
-        variant="danger"
+        title="Reset Application Cache"
+        onPress={handleResetCache}
+        variant="secondary"
         loading={isLoggingOut}
         disabled={isLoggingOut}
         style={styles.logoutButton}
       />
     </ScreenContainer>
+
   );
 }
 
@@ -264,6 +336,21 @@ const styles = StyleSheet.create({
   },
   presetIconWrapper: {
     backgroundColor: 'rgba(245, 158, 11, 0.12)',
+  },
+  cardHeaderWithIcon: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  backupFeedback: {
+    fontSize: fontSizes.xs,
+    marginBottom: spacing.sm,
+    fontWeight: fontWeights.medium,
+  },
+  backupSuccess: {
+    color: colors.brandLight,
+  },
+  backupError: {
+    color: colors.danger,
   },
   logoutButton: {
     marginTop: spacing.lg,
