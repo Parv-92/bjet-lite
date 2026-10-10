@@ -184,6 +184,7 @@ export default function TransactionsScreen() {
     );
   };
 
+
   if (!isAuthenticated) {
     return null;
   }
