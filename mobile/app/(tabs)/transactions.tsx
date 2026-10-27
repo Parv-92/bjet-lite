@@ -22,6 +22,7 @@ import {
   X,
   ArrowDownLeft,
   ArrowUpRight,
+  Settings as SettingsIcon,
 } from 'lucide-react-native';
 import { ScreenContainer } from '../../src/components/common/ScreenContainer';
 import { TransactionCard } from '../../src/components/transactions/TransactionCard';
@@ -233,6 +234,15 @@ export default function TransactionsScreen() {
             >
               <Plus color={colors.background} size={16} strokeWidth={2.5} />
               <Text style={styles.addButtonText}>Add</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.settingsButton}
+              onPress={() => router.push('/settings')}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Open settings"
+            >
+              <SettingsIcon color={colors.textSecondary} size={18} />
             </TouchableOpacity>
           </View>
         </View>
@@ -484,6 +494,16 @@ const styles = StyleSheet.create({
     color: colors.background,
     fontSize: fontSizes.sm,
     fontWeight: fontWeights.bold,
+  },
+  settingsButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: colors.border,
+    width: 36,
+    height: 36,
+    borderRadius: radii.md,
   },
   selectionBar: {
     flexDirection: 'row',

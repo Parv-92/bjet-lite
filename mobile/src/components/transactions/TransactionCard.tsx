@@ -137,12 +137,27 @@ export const TransactionCard: React.FC<TransactionCardProps> = ({
             </View>
 
             <View style={styles.metaRow}>
-              <Text
-                style={[styles.categoryBadge, { color: categoryColor }]}
-                numberOfLines={1}
+              <TouchableOpacity
+                onPress={(e) => {
+                  e.stopPropagation?.();
+                  if (isSelectionMode) {
+                    onToggleSelect?.(transaction.id);
+                  } else {
+                    router.push(`/transaction/edit/${transaction.id}` as any);
+                  }
+                }}
+                activeOpacity={0.7}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                accessibilityRole="button"
+                accessibilityLabel={`Categorize ${merchantName}, currently ${categoryName}`}
               >
-                {categoryName}
-              </Text>
+                <Text
+                  style={[styles.categoryBadge, { color: categoryColor }]}
+                  numberOfLines={1}
+                >
+                  {categoryName}
+                </Text>
+              </TouchableOpacity>
               {transaction.friend?.name && (
                 <Text style={styles.friendBadge} numberOfLines={1}>
                   ({transaction.friend.name})

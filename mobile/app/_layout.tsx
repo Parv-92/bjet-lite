@@ -19,6 +19,7 @@ import { LoadingSpinner } from '../src/components/ui/LoadingSpinner';
 import { Button } from '../src/components/ui/Button';
 import { fileLifecycleService } from '../src/services/receipt';
 import { initDatabase } from '../src/db';
+import { FirstLaunchOnboardingModal } from '../src/components/onboarding/FirstLaunchOnboardingModal';
 
 function RouteGuard({ children }: { children: React.ReactNode }) {
   const segments = useSegments();
@@ -65,6 +66,7 @@ export default function RootLayout() {
               <Stack.Screen name="index" />
               <Stack.Screen name="(auth)" />
               <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="settings" />
               <Stack.Screen name="transaction/[id]" />
               <Stack.Screen name="transaction/create" />
               <Stack.Screen name="transaction/edit/[id]" />
@@ -78,7 +80,10 @@ export default function RootLayout() {
               <Stack.Screen name="rules" />
               <Stack.Screen name="rule/create" />
               <Stack.Screen name="rule/edit/[id]" />
+              <Stack.Screen name="friends" />
+              <Stack.Screen name="budget-presets" />
             </Stack>
+            <FirstLaunchOnboardingModal />
           </RouteGuard>
         </AuthProvider>
       </QueryClientProvider>

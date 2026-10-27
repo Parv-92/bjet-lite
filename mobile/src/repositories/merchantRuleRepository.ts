@@ -9,6 +9,11 @@ import type { UserMerchantRule, CreateMerchantRuleRequest } from '../types/rules
 import { mapCategoryRow } from './categoryRepository';
 import { ConflictError, NotFoundError, ValidationError } from './errors';
 
+export function normalizeMerchantPattern(pattern: string): string {
+  if (!pattern) return '';
+  return pattern.trim().replace(/\s+/g, ' ').toUpperCase();
+}
+
 export interface IMerchantRuleRepository {
   getAll(): Promise<UserMerchantRule[]>;
   getById(id: number): Promise<UserMerchantRule | null>;
@@ -17,6 +22,7 @@ export interface IMerchantRuleRepository {
   replaceRule(id: number, data: CreateMerchantRuleRequest): Promise<UserMerchantRule>;
   delete(id: number): Promise<void>;
   matchRule(merchantName: string, upiVpa?: string | null): Promise<UserMerchantRule | null>;
+  upsertRule(merchantPattern: string, categoryId: number, priority?: number): Promise<UserMerchantRule>;
 }
 
 interface RuleWithCategoryRow extends UserMerchantRuleRow {
@@ -54,9 +60,23 @@ function mapRuleWithCategoryRow(row: RuleWithCategoryRow): UserMerchantRule {
 
 export class SQLiteMerchantRuleRepository implements IMerchantRuleRepository {
   private getDb: () => Promise<SQLiteDatabase>;
+  private hasUserIdColumn: boolean | null = null;
 
   constructor(getDb: () => Promise<SQLiteDatabase> = getDatabaseAsync) {
     this.getDb = getDb;
+  }
+
+  private async checkUserIdColumn(db: SQLiteDatabase): Promise<boolean> {
+    if (this.hasUserIdColumn !== null) return this.hasUserIdColumn;
+    try {
+      const tableInfo = await db.getAllAsync<{ name: string }>(
+        `PRAGMA table_info(user_merchant_rules);`
+      );
+      this.hasUserIdColumn = tableInfo.some((col) => col.name === 'user_id');
+      return this.hasUserIdColumn;
+    } catch {
+      return false;
+    }
   }
 
   private getBaseSelectQuery(): string {
@@ -93,7 +113,7 @@ export class SQLiteMerchantRuleRepository implements IMerchantRuleRepository {
   }
 
   async create(data: CreateMerchantRuleRequest): Promise<UserMerchantRule> {
-    const pattern = data.merchant_pattern.trim();
+    const pattern = normalizeMerchantPattern(data.merchant_pattern);
     if (!pattern) throw new ValidationError('Merchant pattern is required.');
     if (!data.category_id) throw new ValidationError('Category ID is required.');
 
@@ -118,12 +138,22 @@ export class SQLiteMerchantRuleRepository implements IMerchantRuleRepository {
     }
 
     const priority = data.priority ?? 1;
+    const hasUserId = await this.checkUserIdColumn(db);
 
-    const result = await db.runAsync(
-      `INSERT INTO user_merchant_rules (merchant_pattern, category_id, priority)
-       VALUES (?, ?, ?);`,
-      [pattern, data.category_id, priority]
-    );
+    let result;
+    if (hasUserId) {
+      result = await db.runAsync(
+        `INSERT INTO user_merchant_rules (user_id, merchant_pattern, category_id, priority)
+         VALUES (1, ?, ?, ?);`,
+        [pattern, data.category_id, priority]
+      );
+    } else {
+      result = await db.runAsync(
+        `INSERT INTO user_merchant_rules (merchant_pattern, category_id, priority)
+         VALUES (?, ?, ?);`,
+        [pattern, data.category_id, priority]
+      );
+    }
 
     const created = await this.getById(result.lastInsertRowId);
     if (!created) {
@@ -141,7 +171,7 @@ export class SQLiteMerchantRuleRepository implements IMerchantRuleRepository {
 
     let newPattern = existing.merchant_pattern;
     if (data.merchant_pattern !== undefined) {
-      newPattern = data.merchant_pattern.trim();
+      newPattern = normalizeMerchantPattern(data.merchant_pattern);
       if (!newPattern) throw new ValidationError('Merchant pattern cannot be blank.');
 
       const conflict = await db.getFirstAsync<{ id: number }>(
@@ -181,6 +211,32 @@ export class SQLiteMerchantRuleRepository implements IMerchantRuleRepository {
     return updated;
   }
 
+  async upsertRule(
+    merchantPattern: string,
+    categoryId: number,
+    priority: number = 1
+  ): Promise<UserMerchantRule> {
+    const pattern = normalizeMerchantPattern(merchantPattern);
+    if (!pattern) throw new ValidationError('Merchant pattern is required.');
+    if (!categoryId) throw new ValidationError('Category ID is required.');
+
+    const db = await this.getDb();
+    const existing = await db.getFirstAsync<{ id: number }>(
+      `SELECT id FROM user_merchant_rules WHERE merchant_pattern = ? COLLATE NOCASE;`,
+      [pattern]
+    );
+
+    if (existing) {
+      return this.update(existing.id, { category_id: categoryId, priority });
+    } else {
+      return this.create({
+        merchant_pattern: pattern,
+        category_id: categoryId,
+        priority,
+      });
+    }
+  }
+
   async replaceRule(id: number, data: CreateMerchantRuleRequest): Promise<UserMerchantRule> {
     // In local SQLite, replaceRule runs atomically inside a transaction
     const db = await this.getDb();
@@ -206,13 +262,27 @@ export class SQLiteMerchantRuleRepository implements IMerchantRuleRepository {
   }
 
   async matchRule(merchantName: string, upiVpa?: string | null): Promise<UserMerchantRule | null> {
-    const textToMatch = [merchantName || '', upiVpa || ''].join(' ').trim().toLowerCase();
-    if (!textToMatch) return null;
+    const rawCandidate = [merchantName || '', upiVpa || ''].join(' ').trim();
+    if (!rawCandidate) return null;
+
+    const normCandidate = normalizeMerchantPattern(rawCandidate);
+    if (!normCandidate) return null;
 
     const rules = await this.getAll();
-    for (const rule of rules) {
-      const pattern = rule.merchant_pattern.trim().toLowerCase();
-      if (textToMatch.includes(pattern)) {
+    // Sort rules: higher priority first, then longer pattern first (more specific match wins)
+    const sortedRules = [...rules].sort((a, b) => {
+      if (b.priority !== a.priority) return b.priority - a.priority;
+      return b.merchant_pattern.length - a.merchant_pattern.length;
+    });
+
+    for (const rule of sortedRules) {
+      const normPattern = normalizeMerchantPattern(rule.merchant_pattern);
+      if (!normPattern) continue;
+      // Case-insensitive substring match or exact match
+      if (
+        normCandidate.includes(normPattern) ||
+        (normPattern.length >= 3 && normPattern.includes(normCandidate))
+      ) {
         return rule;
       }
     }

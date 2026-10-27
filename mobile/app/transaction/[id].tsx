@@ -216,7 +216,13 @@ export default function TransactionDetailScreen() {
         <View style={styles.divider} />
 
         {/* Category */}
-        <View style={styles.row}>
+        <TouchableOpacity
+          style={styles.row}
+          onPress={handleEdit}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Edit category"
+        >
           <View style={styles.labelGroup}>
             <Tag color={categoryColor} size={16} />
             <Text style={styles.rowLabel}>Category</Text>
@@ -225,7 +231,7 @@ export default function TransactionDetailScreen() {
             <View style={[styles.categoryDot, { backgroundColor: categoryColor }]} />
             <Text style={[styles.rowValue, { color: categoryColor }]}>{categoryName}</Text>
           </View>
-        </View>
+        </TouchableOpacity>
 
         <View style={styles.divider} />
 

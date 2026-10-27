@@ -1,12 +1,10 @@
 /**
  * Bjet Mobile - Entry Index
- * Delegated to root RouteGuard which redirects to (tabs) or (auth)/login.
+ * Redirects to the primary (tabs)/transactions tab upon app launch.
  */
 import React from 'react';
 import { Redirect } from 'expo-router';
 
-
 export default function EntryIndex() {
-  return <Redirect href="/(tabs)" />;
+  return <Redirect href="/(tabs)/transactions" />;
 }
-

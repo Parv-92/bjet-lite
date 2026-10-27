@@ -1,7 +1,12 @@
 /**
- * Bjet Mobile - Bottom Tabs Layout
- * Features 5 tabs: Home, Transactions, Scan (prominent elevated central button),
- * Budgets, and Settings.
+ * Bjet Mobile - Symmetrical 3-Tab Bottom Navigation
+ *
+ * Primary destinations:
+ * 1. Transactions (Left)
+ * 2. Scan (Center, restrained subtle accent, integrated in bar)
+ * 3. Budgets (Right)
+ *
+ * Settings has moved to root Stack (/settings) with back button navigation.
  */
 import React from 'react';
 import { View, StyleSheet, Platform } from 'react-native';
@@ -10,7 +15,6 @@ import {
   FileText,
   ReceiptText,
   PieChart,
-  Settings as SettingsIcon,
 } from 'lucide-react-native';
 import { colors } from '../../src/theme/colors';
 import { fontSizes, fontWeights } from '../../src/theme/typography';
@@ -18,6 +22,7 @@ import { fontSizes, fontWeights } from '../../src/theme/typography';
 export default function TabsLayout() {
   return (
     <Tabs
+      initialRouteName="transactions"
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
@@ -31,52 +36,71 @@ export default function TabsLayout() {
         tabBarActiveTintColor: colors.brand,
         tabBarInactiveTintColor: colors.textMuted,
         tabBarItemStyle: {
-          paddingHorizontal: 0,
+          flex: 1,
+          alignItems: 'center',
+          justifyContent: 'center',
+          paddingVertical: 2,
         },
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: fontWeights.medium,
           letterSpacing: -0.2,
+          marginTop: 2,
         },
       }}
     >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Budgets',
-          tabBarIcon: ({ color, size }) => <PieChart color={color} size={size || 22} />,
-        }}
-      />
+      {/* 1. Transactions (Left) */}
       <Tabs.Screen
         name="transactions"
         options={{
           title: 'Transactions',
-          tabBarIcon: ({ color, size }) => <ReceiptText color={color} size={size || 22} />,
+          tabBarIcon: ({ color, focused }) => (
+            <ReceiptText
+              color={color}
+              size={22}
+              strokeWidth={focused ? 2.3 : 1.8}
+            />
+          ),
         }}
       />
+
+      {/* 2. Scan (Center with subtle restrained accent) */}
       <Tabs.Screen
         name="scan"
         options={{
-          title: 'Import',
-          tabBarIcon: ({ focused }) => (
-            <View style={[styles.elevatedScanButton, focused && styles.elevatedScanButtonActive]}>
-              <FileText color="#020617" size={24} strokeWidth={2.5} />
+          title: 'Scan',
+          tabBarIcon: ({ color, focused }) => (
+            <View style={[styles.scanIconPill, focused && styles.scanIconPillActive]}>
+              <FileText
+                color={focused ? colors.brandLight : color}
+                size={20}
+                strokeWidth={focused ? 2.3 : 1.8}
+              />
             </View>
           ),
-          tabBarLabel: () => null, // Hide text label to emphasize the elevated action
         }}
       />
+
+      {/* 3. Budgets (Right) */}
+      <Tabs.Screen
+        name="index"
+        options={{
+          title: 'Budgets',
+          tabBarIcon: ({ color, focused }) => (
+            <PieChart
+              color={color}
+              size={22}
+              strokeWidth={focused ? 2.3 : 1.8}
+            />
+          ),
+        }}
+      />
+
+      {/* Hidden Routes (Maintained for route compatibility) */}
       <Tabs.Screen
         name="budgets"
         options={{
-          href: null, // Hidden from tab bar, handled by merged overview
-        }}
-      />
-      <Tabs.Screen
-        name="settings"
-        options={{
-          title: 'Settings',
-          tabBarIcon: ({ color, size }) => <SettingsIcon color={color} size={size || 22} />,
+          href: null,
         }}
       />
     </Tabs>
@@ -84,24 +108,18 @@ export default function TabsLayout() {
 }
 
 const styles = StyleSheet.create({
-  elevatedScanButton: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: colors.brand,
+  scanIconPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 2,
+    borderRadius: 12,
+    backgroundColor: 'rgba(16, 185, 129, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.22)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: Platform.OS === 'ios' ? 16 : 22,
-    shadowColor: colors.brand,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 6,
-    elevation: 8,
-    borderWidth: 3,
-    borderColor: colors.background,
   },
-  elevatedScanButtonActive: {
-    backgroundColor: colors.brandLight,
-    transform: [{ scale: 1.05 }],
+  scanIconPillActive: {
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    borderColor: colors.brand,
   },
 });

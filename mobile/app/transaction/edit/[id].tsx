@@ -274,30 +274,32 @@ export default function EditTransactionScreen() {
         </View>
 
         {/* Optional Merchant Default Action */}
-        {merchantName.length > 0 && selectedCategoryId !== null && (
-          <Controller
-            control={control}
-            name="set_as_merchant_default"
-            render={({ field: { value, onChange } }) => (
-              <TouchableOpacity
-                style={styles.defaultCheckboxRow}
-                onPress={() => onChange(!value)}
-                activeOpacity={0.7}
-                accessibilityRole="checkbox"
-                accessibilityState={{ checked: !!value }}
-                accessibilityLabel={`Make ${selectedCategory?.name || 'this category'} the default for ${merchantName}`}
-              >
-                <View style={[styles.checkbox, value && styles.checkboxActive]}>
-                  {value && <Check color={colors.background} size={14} strokeWidth={3} />}
-                </View>
-                <Text style={styles.defaultCheckboxText}>
-                  Make this the default category for{' '}
-                  <Text style={styles.merchantHighlight}>{merchantName}</Text>
-                </Text>
-              </TouchableOpacity>
-            )}
-          />
-        )}
+        {merchantName.length > 0 &&
+          selectedCategoryId !== null &&
+          selectedCategory?.name !== 'Uncategorized' && (
+            <Controller
+              control={control}
+              name="set_as_merchant_default"
+              render={({ field: { value, onChange } }) => (
+                <TouchableOpacity
+                  style={styles.defaultCheckboxRow}
+                  onPress={() => onChange(!value)}
+                  activeOpacity={0.7}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: !!value }}
+                  accessibilityLabel={`Keep ${selectedCategory?.name || 'this category'} default for ${merchantName}`}
+                >
+                  <View style={[styles.checkbox, value && styles.checkboxActive]}>
+                    {value && <Check color={colors.background} size={14} strokeWidth={3} />}
+                  </View>
+                  <Text style={styles.defaultCheckboxText}>
+                    Keep this category default for{' '}
+                    <Text style={styles.merchantHighlight}>{merchantName}</Text>
+                  </Text>
+                </TouchableOpacity>
+              )}
+            />
+          )}
 
         {/* Paid for someone else (Outgoing expenses only) */}
         {tx && tx.direction !== 'RECEIVED' && (

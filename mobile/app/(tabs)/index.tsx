@@ -33,6 +33,7 @@ import {
   Check,
   ArrowRight,
   PieChart as PieChartIcon,
+  Settings as SettingsIcon,
 } from 'lucide-react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { ScreenContainer } from '../../src/components/common/ScreenContainer';
@@ -116,7 +117,7 @@ export default function OverviewScreen() {
   const isPreviousCompleted =
     selectedMonth === prevCompletedMonth && selectedYear === prevCompletedYear;
   const monthName = MONTH_NAMES[selectedMonth - 1] || `Month ${selectedMonth}`;
-  const displayName = user?.full_name || user?.email?.split('@')[0] || 'User';
+  const displayName = user?.full_name?.trim() || 'User';
 
   const handleRefresh = async () => {
     await Promise.all([
@@ -247,6 +248,15 @@ export default function OverviewScreen() {
           >
             <Plus color={colors.background} size={15} />
             <Text style={styles.addButtonText}>Add</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.settingsButton}
+            onPress={() => router.push('/settings')}
+            accessibilityLabel="Settings"
+            activeOpacity={0.8}
+          >
+            <SettingsIcon color={colors.textSecondary} size={16} />
           </TouchableOpacity>
         </View>
       </View>
@@ -469,6 +479,15 @@ const styles = StyleSheet.create({
     color: colors.background,
     fontSize: fontSizes.xs,
     fontWeight: fontWeights.bold,
+  },
+  settingsButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.sm,
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   jumpBanner: {
     flexDirection: 'row',

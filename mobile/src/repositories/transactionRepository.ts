@@ -25,7 +25,7 @@ import type {
 } from '../types/api';
 import { mapCategoryRow } from './categoryRepository';
 import { SQLiteFriendRepository } from './friendRepository';
-import { SQLiteMerchantRuleRepository } from './merchantRuleRepository';
+import { SQLiteMerchantRuleRepository, normalizeMerchantPattern } from './merchantRuleRepository';
 import { NotFoundError, ValidationError } from './errors';
 
 export interface GetTransactionsParams {
@@ -233,6 +233,74 @@ export class SQLiteTransactionRepository implements ITransactionRepository {
     return row ? mapTransactionJoinedRow(row) : null;
   }
 
+  /**
+   * Applies merchant default rule and safely updates existing uncategorized transactions.
+   */
+  private async applyMerchantDefaultRule(
+    db: SQLiteDatabase,
+    merchantRawName: string | null | undefined,
+    categoryId: number | null | undefined,
+    excludeTxId?: number
+  ): Promise<void> {
+    if (!categoryId) {
+      throw new ValidationError('Cannot set default category without selecting a category.');
+    }
+
+    const cat = await db.getFirstAsync<{ name: string }>(
+      `SELECT name FROM categories WHERE id = ?;`,
+      [categoryId]
+    );
+    if (!cat) {
+      throw new NotFoundError(`Category with ID ${categoryId} not found.`);
+    }
+    if (cat.name.toLowerCase() === 'uncategorized') {
+      throw new ValidationError("Cannot set 'Uncategorized' as a merchant default category.");
+    }
+
+    const rawMerchant = (merchantRawName || '').trim();
+    if (!rawMerchant) {
+      throw new ValidationError('Cannot set merchant default for a transaction without a merchant name.');
+    }
+
+    const cleanPattern = normalizeMerchantPattern(rawMerchant);
+    if (!cleanPattern) {
+      throw new ValidationError('Merchant pattern cannot be blank.');
+    }
+
+    const ruleRepo = new SQLiteMerchantRuleRepository(this.getDb);
+    await ruleRepo.upsertRule(cleanPattern, categoryId, 1);
+
+    // Safe backfill: Only update other transactions that are UNCATEGORIZED
+    // Never overwrite a category the user deliberately selected manually
+    const uncategorizedCategory = await db.getFirstAsync<{ id: number }>(
+      `SELECT id FROM categories WHERE name = 'Uncategorized' COLLATE NOCASE;`
+    );
+    const uncatId = uncategorizedCategory?.id;
+
+    const uncatCondition = uncatId !== undefined
+      ? `(category_id IS NULL OR category_id = ${uncatId})`
+      : `category_id IS NULL`;
+
+    if (excludeTxId) {
+      await db.runAsync(
+        `UPDATE transactions
+         SET category_id = ?, updated_at = datetime('now')
+         WHERE id != ?
+           AND merchant_raw_name = ? COLLATE NOCASE
+           AND ${uncatCondition};`,
+        [categoryId, excludeTxId, rawMerchant]
+      );
+    } else {
+      await db.runAsync(
+        `UPDATE transactions
+         SET category_id = ?, updated_at = datetime('now')
+         WHERE merchant_raw_name = ? COLLATE NOCASE
+           AND ${uncatCondition};`,
+        [categoryId, rawMerchant]
+      );
+    }
+  }
+
   async createTransaction(data: CreateManualTransactionRequest): Promise<Transaction> {
     if (!data.amount || data.amount <= 0) {
       throw new ValidationError('Transaction amount must be greater than 0.');
@@ -342,24 +410,13 @@ export class SQLiteTransactionRepository implements ITransactionRepository {
       throw new Error('Failed to retrieve newly created transaction.');
     }
 
-    if (data.set_as_merchant_default && created.merchant_raw_name?.trim() && created.category_id) {
-      const cleanPattern = created.merchant_raw_name.trim();
-      const ruleRepo = new SQLiteMerchantRuleRepository(this.getDb);
-      const db = await this.getDb();
-      const existing = await db.getFirstAsync<{ id: number }>(
-        `SELECT id FROM user_merchant_rules WHERE merchant_pattern = ? COLLATE NOCASE;`,
-        [cleanPattern]
+    if (data.set_as_merchant_default) {
+      await this.applyMerchantDefaultRule(
+        db,
+        created.merchant_raw_name,
+        created.category_id,
+        created.id
       );
-
-      if (existing) {
-        await ruleRepo.update(existing.id, { category_id: created.category_id });
-      } else {
-        await ruleRepo.create({
-          merchant_pattern: cleanPattern,
-          category_id: created.category_id,
-          priority: 1,
-        });
-      }
     }
 
     return created;
@@ -431,24 +488,13 @@ export class SQLiteTransactionRepository implements ITransactionRepository {
       throw new Error(`Failed to retrieve updated transaction ${id}.`);
     }
 
-    if (data.set_as_merchant_default && updated.merchant_raw_name?.trim() && updated.category_id) {
-      const cleanPattern = updated.merchant_raw_name.trim();
-      const ruleRepo = new SQLiteMerchantRuleRepository(this.getDb);
-      const db = await this.getDb();
-      const existing = await db.getFirstAsync<{ id: number }>(
-        `SELECT id FROM user_merchant_rules WHERE merchant_pattern = ? COLLATE NOCASE;`,
-        [cleanPattern]
+    if (data.set_as_merchant_default) {
+      await this.applyMerchantDefaultRule(
+        db,
+        updated.merchant_raw_name,
+        updated.category_id,
+        id
       );
-
-      if (existing) {
-        await ruleRepo.update(existing.id, { category_id: updated.category_id });
-      } else {
-        await ruleRepo.create({
-          merchant_pattern: cleanPattern,
-          category_id: updated.category_id,
-          priority: 1,
-        });
-      }
     }
 
     return updated;
