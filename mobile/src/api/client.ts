@@ -38,10 +38,15 @@ export function resolveApiBaseUrl(): string {
 
   // 2. Production mode validation
   if (!envUrl) {
+    if (process.env.EXPO_PUBLIC_APP_VARIANT !== 'full') {
+      // In Bjet Lite offline architecture, no remote API endpoint is required.
+      return 'http://offline.bjet.lite/api/v1';
+    }
     throw new Error(
       'Production API endpoint is not configured yet. Production builds require an explicit HTTPS EXPO_PUBLIC_API_BASE_URL.'
     );
   }
+
 
   const normalized = envUrl.replace(/\/+$/, '');
 

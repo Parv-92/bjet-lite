@@ -7,7 +7,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-nati
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { AlertTriangle, ChevronRight } from 'lucide-react-native';
+import { ChevronRight } from 'lucide-react-native';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
@@ -80,18 +80,12 @@ export const MerchantRuleForm: React.FC<MerchantRuleFormProps> = ({
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
     >
-      {/* Replacement Notice Banner if Editing */}
-      {isEditing && (
-        <Card style={styles.noticeCard}>
-          <View style={styles.noticeHeader}>
-            <AlertTriangle size={16} color={colors.warning} style={styles.noticeIcon} />
-            <Text style={styles.noticeTitle}>Rule Replacement</Text>
-          </View>
-          <Text style={styles.noticeText}>
-            Saving edits replaces this rule configuration with a new rule. Existing transactions remain unchanged.
-          </Text>
-        </Card>
-      )}
+      {/* Concise Explanatory Copy */}
+      <Card style={styles.infoCard}>
+        <Text style={styles.infoText}>
+          Transactions matching this merchant will use the selected category by default.
+        </Text>
+      </Card>
 
       {/* Server Error Banner */}
       {serverError ? (
@@ -100,21 +94,6 @@ export const MerchantRuleForm: React.FC<MerchantRuleFormProps> = ({
         </View>
       ) : null}
 
-      {/* Live Preview Card */}
-      <Card style={styles.previewCard}>
-        <Text style={styles.previewHeading}>Rule Preview</Text>
-        <Text style={styles.previewSummary}>
-          Transactions with merchant or UPI containing{' '}
-          <Text style={styles.previewHighlight}>
-            "{watchedPattern.trim() ? watchedPattern.trim().toUpperCase() : 'PATTERN'}"
-          </Text>
-          {' '}will be automatically suggested as{' '}
-          <Text style={styles.previewHighlight}>
-            {selectedCategory ? selectedCategory.name : 'Category'}
-          </Text>.
-        </Text>
-      </Card>
-
       {/* Merchant Pattern Input */}
       <Controller
         control={control}
@@ -122,8 +101,8 @@ export const MerchantRuleForm: React.FC<MerchantRuleFormProps> = ({
         render={({ field: { onChange, onBlur, value } }) => (
           <View>
             <Input
-              label="Merchant Pattern *"
-              placeholder="e.g. SWIGGY, UBER, ZOMATO"
+              label="Merchant Pattern"
+              placeholder="e.g. SWIGGY, UBER, JIO"
               value={value}
               onChangeText={onChange}
               onBlur={onBlur}
@@ -132,16 +111,13 @@ export const MerchantRuleForm: React.FC<MerchantRuleFormProps> = ({
               maxLength={100}
               autoFocus={!initialValues?.merchant_pattern}
             />
-            <Text style={styles.fieldHint}>
-              Matches any merchant name or UPI VPA containing this text (case-insensitive substring match).
-            </Text>
           </View>
         )}
       />
 
       {/* Category Selector */}
       <View style={styles.categorySection}>
-        <Text style={styles.fieldLabel}>Target Category *</Text>
+        <Text style={styles.fieldLabel}>Default Category</Text>
         <TouchableOpacity
           style={[
             styles.categoryButton,
@@ -150,7 +126,7 @@ export const MerchantRuleForm: React.FC<MerchantRuleFormProps> = ({
           onPress={() => setPickerVisible(true)}
           activeOpacity={0.7}
           accessibilityRole="button"
-          accessibilityLabel="Select target category"
+          accessibilityLabel="Select default category"
         >
           {selectedCategory ? (
             <View style={styles.selectedCategoryRow}>
@@ -172,7 +148,7 @@ export const MerchantRuleForm: React.FC<MerchantRuleFormProps> = ({
             </View>
           ) : (
             <Text style={styles.placeholderCategoryText}>
-              Select category to map to...
+              Select category...
             </Text>
           )}
           <ChevronRight size={18} color={colors.textMuted} />
@@ -221,63 +197,19 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: spacing.xxl,
   },
-  noticeCard: {
+  infoCard: {
     padding: spacing.md,
-    backgroundColor: 'rgba(245, 158, 11, 0.1)',
-    borderColor: 'rgba(245, 158, 11, 0.3)',
+    backgroundColor: colors.surfaceElevated,
+    borderColor: colors.border,
     marginBottom: spacing.md,
   },
-  noticeHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  noticeIcon: {
-    marginRight: spacing.xs,
-  },
-  noticeTitle: {
-    color: colors.warning,
-    fontSize: fontSizes.xs,
-    fontWeight: fontWeights.bold,
-    textTransform: 'uppercase',
-  },
-  noticeText: {
+  infoText: {
     color: colors.textSecondary,
     fontSize: fontSizes.xs,
     lineHeight: 18,
   },
   errorWrapper: {
     marginBottom: spacing.md,
-  },
-  previewCard: {
-    padding: spacing.md,
-    backgroundColor: colors.surfaceElevated,
-    borderColor: colors.border,
-    marginBottom: spacing.md,
-  },
-  previewHeading: {
-    color: colors.textMuted,
-    fontSize: fontSizes.xs,
-    fontWeight: fontWeights.semibold,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: spacing.xs,
-  },
-  previewSummary: {
-    color: colors.textSecondary,
-    fontSize: fontSizes.sm,
-    lineHeight: 20,
-  },
-  previewHighlight: {
-    color: colors.brandLight,
-    fontWeight: fontWeights.bold,
-  },
-  fieldHint: {
-    color: colors.textMuted,
-    fontSize: fontSizes.xs,
-    marginTop: -spacing.sm,
-    marginBottom: spacing.md,
-    lineHeight: 16,
   },
   categorySection: {
     marginBottom: spacing.md,

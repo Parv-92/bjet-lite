@@ -5,10 +5,11 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
-import { FolderTree, ChevronRight, Sliders, Users, BookmarkCheck, ShieldCheck } from 'lucide-react-native';
+import { FolderTree, ChevronRight, Sliders, Users, BookmarkCheck, ShieldCheck, BookOpen, Receipt, FileText } from 'lucide-react-native';
 import { ScreenContainer } from '../../src/components/common/ScreenContainer';
 import { Card } from '../../src/components/ui/Card';
 import { Button } from '../../src/components/ui/Button';
+import { HelpGuidesModal } from '../../src/components/settings/HelpGuidesModal';
 import { useAuth } from '../../src/hooks/useAuth';
 import { performBackup, getLatestBackup, type BackupFileEntry } from '../../src/services/backup';
 import { colors } from '../../src/theme/colors';
@@ -22,6 +23,13 @@ export default function SettingsScreen() {
   const [latestBackup, setLatestBackup] = useState<BackupFileEntry | null>(null);
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [backupMessage, setBackupMessage] = useState<string | null>(null);
+  const [helpModalVisible, setHelpModalVisible] = useState(false);
+  const [selectedGuideId, setSelectedGuideId] = useState(1);
+
+  const openGuide = (id: number) => {
+    setSelectedGuideId(id);
+    setHelpModalVisible(true);
+  };
 
   useEffect(() => {
     getLatestBackup().then((b) => setLatestBackup(b)).catch(() => {});
@@ -219,6 +227,93 @@ export default function SettingsScreen() {
         />
       </Card>
 
+      {/* Help & How It Works */}
+      <Card style={styles.card}>
+        <View style={styles.cardHeaderWithIcon}>
+          <BookOpen size={20} color={colors.brandLight} style={{ marginRight: spacing.xs }} />
+          <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Help & How It Works</Text>
+        </View>
+        <Text style={styles.sectionSubtitleText}>
+          Offline visual guides explaining core features and calculations
+        </Text>
+
+        <TouchableOpacity
+          style={[styles.settingRow, { marginTop: spacing.md }]}
+          onPress={() => openGuide(1)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.settingRowLeft}>
+            <View style={[styles.settingIconWrapper, styles.ruleIconWrapper]}>
+              <Sliders size={20} color="#8B5CF6" />
+            </View>
+            <View style={styles.settingTextContainer}>
+              <Text style={styles.settingTitle}>Merchant Rules</Text>
+              <Text style={styles.settingDescription}>
+                What a pattern is & bulk uncategorized rules
+              </Text>
+            </View>
+          </View>
+          <ChevronRight size={18} color={colors.textMuted} />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.settingRow, styles.settingRowDivider]}
+          onPress={() => openGuide(2)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.settingRowLeft}>
+            <View style={[styles.settingIconWrapper, styles.friendIconWrapper]}>
+              <Users size={20} color="#38BDF8" />
+            </View>
+            <View style={styles.settingTextContainer}>
+              <Text style={styles.settingTitle}>Friends & Reimbursements</Text>
+              <Text style={styles.settingDescription}>
+                Matching incoming transfers to offset personal spending
+              </Text>
+            </View>
+          </View>
+          <ChevronRight size={18} color={colors.textMuted} />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.settingRow, styles.settingRowDivider]}
+          onPress={() => openGuide(3)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.settingRowLeft}>
+            <View style={[styles.settingIconWrapper, styles.presetIconWrapper]}>
+              <Receipt size={20} color="#F59E0B" />
+            </View>
+            <View style={styles.settingTextContainer}>
+              <Text style={styles.settingTitle}>I Paid for Someone Else</Text>
+              <Text style={styles.settingDescription}>
+                Splitting expenses & personal spending exclusion
+              </Text>
+            </View>
+          </View>
+          <ChevronRight size={18} color={colors.textMuted} />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.settingRow, styles.settingRowDivider]}
+          onPress={() => openGuide(4)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.settingRowLeft}>
+            <View style={[styles.settingIconWrapper, { backgroundColor: 'rgba(16, 185, 129, 0.12)' }]}>
+              <FileText size={20} color={colors.brandLight} />
+            </View>
+            <View style={styles.settingTextContainer}>
+              <Text style={styles.settingTitle}>Importing UPI Statements</Text>
+              <Text style={styles.settingDescription}>
+                Selecting monthly PDFs & duplicate detection
+              </Text>
+            </View>
+          </View>
+          <ChevronRight size={18} color={colors.textMuted} />
+        </TouchableOpacity>
+      </Card>
+
       <Card style={styles.card}>
         <Text style={styles.sectionTitle}>Application Info</Text>
         <View style={styles.infoRow}>
@@ -242,6 +337,13 @@ export default function SettingsScreen() {
         loading={isLoggingOut}
         disabled={isLoggingOut}
         style={styles.logoutButton}
+      />
+
+      {/* Help Guides Modal */}
+      <HelpGuidesModal
+        visible={helpModalVisible}
+        initialGuide={selectedGuideId}
+        onClose={() => setHelpModalVisible(false)}
       />
     </ScreenContainer>
 
@@ -272,6 +374,12 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.lg,
     fontWeight: fontWeights.semibold,
     marginBottom: spacing.md,
+  },
+  sectionSubtitleText: {
+    color: colors.textSecondary,
+    fontSize: fontSizes.xs,
+    marginTop: -spacing.xs,
+    marginBottom: spacing.xs,
   },
   infoRow: {
     marginBottom: spacing.md,

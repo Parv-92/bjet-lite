@@ -44,16 +44,14 @@ export default function FriendsScreen() {
   // Modal State
   const [modalVisible, setModalVisible] = useState(false);
   const [editingFriend, setEditingFriend] = useState<Friend | null>(null);
-  const [formName, setFormName] = useState('');
-  const [formPattern, setFormPattern] = useState('');
+  const [formNamePattern, setFormNamePattern] = useState('');
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
 
   const openAddModal = () => {
     setEditingFriend(null);
-    setFormName('');
-    setFormPattern('');
+    setFormNamePattern('');
     setSelectedCategoryId(categories && categories.length > 0 ? categories[0].id : null);
     setModalError(null);
     setModalVisible(true);
@@ -61,8 +59,7 @@ export default function FriendsScreen() {
 
   const openEditModal = (friend: Friend) => {
     setEditingFriend(friend);
-    setFormName(friend.name);
-    setFormPattern(friend.recognized_name);
+    setFormNamePattern(friend.name || friend.recognized_name);
     setSelectedCategoryId(friend.category_id);
     setModalError(null);
     setModalVisible(true);
@@ -70,15 +67,11 @@ export default function FriendsScreen() {
 
   const handleSave = async () => {
     setModalError(null);
-    const cleanName = formName.trim();
-    const cleanPattern = formPattern.trim().toUpperCase();
+    const cleanName = formNamePattern.trim();
+    const cleanPattern = cleanName.toUpperCase();
 
     if (!cleanName) {
-      setModalError('Please enter a friend name.');
-      return;
-    }
-    if (!cleanPattern) {
-      setModalError('Please enter a recognized transaction pattern.');
+      setModalError('Please enter a friend name / pattern.');
       return;
     }
     if (!selectedCategoryId) {
@@ -272,28 +265,16 @@ export default function FriendsScreen() {
               )}
 
               <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Friend Name</Text>
+                <Text style={styles.formLabel}>Friend Name / Pattern</Text>
                 <TextInput
                   style={styles.input}
-                  value={formName}
-                  onChangeText={setFormName}
-                  placeholder="e.g. Sourav"
+                  value={formNamePattern}
+                  onChangeText={setFormNamePattern}
+                  placeholder="e.g. Rahul"
                   placeholderTextColor={colors.textMuted}
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Recognized Pattern (Uppercase)</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formPattern}
-                  onChangeText={(text) => setFormPattern(text.toUpperCase())}
-                  placeholder="e.g. SOURAV"
-                  placeholderTextColor={colors.textMuted}
-                  autoCapitalize="characters"
                 />
                 <Text style={styles.helpText}>
-                  Incoming payments containing this name will automatically be treated as reimbursements.
+                  Use the name that appears in transactions to identify reimbursements.
                 </Text>
               </View>
 

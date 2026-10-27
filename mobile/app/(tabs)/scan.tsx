@@ -1,7 +1,7 @@
 /**
- * Bjet Mobile - Receipt Scan Tab Screen
- * Phase 5 implementation: Camera, Gallery, and Document Receipt Input.
- * Validates files client-side, previews metadata, and streams to POST /api/v1/transactions/scan-receipt.
+ * Bjet Mobile - UPI Statement Import Screen (Phase 6 Simplification)
+ * Offers solely UPI Monthly Statement Import via local PDF text extraction.
+ * No camera, gallery, cloud upload, or OCR dependencies.
  */
 import React, { useState } from 'react';
 import {
@@ -10,162 +10,87 @@ import {
   StyleSheet,
   TouchableOpacity,
   Alert,
-  ScrollView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import {
-  Camera,
-  Images,
   FileText,
-  ScanLine,
-  CheckCircle2,
   ArrowRight,
+  ShieldCheck,
+  CheckCircle2,
   RotateCcw,
-  ReceiptText,
+  Upload,
 } from 'lucide-react-native';
 import { ScreenContainer } from '../../src/components/common/ScreenContainer';
 import { Card } from '../../src/components/ui/Card';
 import { Button } from '../../src/components/ui/Button';
 import { ErrorMessage } from '../../src/components/ui/ErrorMessage';
-import { ReceiptPreview } from '../../src/components/receipt/ReceiptPreview';
-import { CameraCaptureModal } from '../../src/components/receipt/CameraCaptureModal';
-import { ExtractionResultModal } from '../../src/components/receipt/ExtractionResultModal';
+import { LoadingSpinner } from '../../src/components/ui/LoadingSpinner';
 import {
   ReceiptFile,
   validateReceiptFile,
 } from '../../src/types/receipt';
 import {
   ReceiptExtractionService,
-  ReceiptExtractionResult,
   ExtractionProgress,
   CancellationToken,
   ReceiptInterpretationService,
   statementCandidateStore,
   fileLifecycleService,
 } from '../../src/services/receipt';
-import { useReceiptUpload } from '../../src/hooks/useReceiptUpload';
 import { useMerchantRules } from '../../src/hooks/useMerchantRules';
 import { useCategories } from '../../src/hooks/useCategories';
 import { useTransactions } from '../../src/hooks/useTransactions';
 import { useFriends } from '../../src/hooks/useFriends';
-import { getApiErrorMessage } from '../../src/api/client';
-import { ReceiptScanResponse } from '../../src/types/api';
 import { colors } from '../../src/theme/colors';
-import { spacing } from '../../src/theme/spacing';
+import { spacing, radii } from '../../src/theme/spacing';
 import { fontSizes, fontWeights } from '../../src/theme/typography';
-// [DIAGNOSTIC INSTRUMENTATION - TEMPORARY]
-import { useRenderDiagnostic } from '../../src/utils/perfDiagnostic';
 
 export default function ScanScreen() {
   const router = useRouter();
   const [selectedFile, setSelectedFile] = useState<ReceiptFile | null>(null);
-  const [cameraModalVisible, setCameraModalVisible] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
-  const [serverError, setServerError] = useState<string | null>(null);
-  const [successResponse, setSuccessResponse] = useState<ReceiptScanResponse | null>(null);
-
-  // Phase 6: Text extraction state
-  const [extractionResult, setExtractionResult] = useState<ReceiptExtractionResult | null>(null);
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractionProgress, setExtractionProgress] = useState<ExtractionProgress | null>(null);
   const [cancellationToken, setCancellationTokenState] = useState<CancellationToken | null>(null);
-  const [extractionModalVisible, setExtractionModalVisible] = useState(false);
-
-  // [DIAGNOSTIC INSTRUMENTATION - TEMPORARY]
-  useRenderDiagnostic('ScanScreen', {
-    hasFile: !!selectedFile,
-    isExtracting,
-    extractionStep: extractionProgress?.step,
-    modalVisible: extractionModalVisible,
-  });
 
   const { data: rules } = useMerchantRules();
   const { data: categories } = useCategories();
   const { data: existingTransactions } = useTransactions();
   const { data: friends } = useFriends();
 
-  const {
-    uploadReceipt,
-    isUploading,
-    uploadProgress,
-    reset: resetUploadMutation,
-  } = useReceiptUpload();
-
   const handleSelectFile = (file: ReceiptFile) => {
-    setServerError(null);
     const validation = validateReceiptFile(file);
     if (!validation.isValid) {
       setValidationError(validation.error || 'Invalid file selected.');
       return;
     }
-    // Centralized lifecycle: register active source file and safely auto-clean previous file if replaced
     fileLifecycleService.registerSourceFile(file.uri).catch(() => {});
     setValidationError(null);
     setSelectedFile(file);
   };
 
-  // 1. Camera Input
-  const handleCameraCapture = () => {
-    setCameraModalVisible(true);
-  };
-
-  // 2. Gallery Input
-  const handleGalleryPick = async () => {
-    try {
-      const permissionResult =
-        await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-      if (!permissionResult.granted) {
-        setValidationError(
-          'Photo library access is required to select receipt images. Please enable permissions in device settings.'
-        );
-        return;
-      }
-
-      const pickerResult = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: false,
-        quality: 1,
-      });
-
-      if (!pickerResult.canceled && pickerResult.assets && pickerResult.assets.length > 0) {
-        const asset = pickerResult.assets[0];
-        const file: ReceiptFile = {
-          uri: asset.uri,
-          name: asset.fileName || `receipt_gallery_${Date.now()}.jpg`,
-          mimeType: asset.mimeType || 'image/jpeg',
-          size: asset.fileSize,
-          source: 'gallery',
-          width: asset.width,
-          height: asset.height,
-        };
-        handleSelectFile(file);
-      }
-    } catch (err) {
-      console.error('Gallery picker error:', err);
-      setValidationError('Failed to access photo library.');
-    }
-  };
-
-  // 3. Document / PDF Input
   const handleDocumentPick = async () => {
     try {
+      setValidationError(null);
       const pickerResult = await DocumentPicker.getDocumentAsync({
-        type: ['application/pdf', 'image/*'],
+        type: ['application/pdf'],
         copyToCacheDirectory: true,
       });
 
       if (!pickerResult.canceled && pickerResult.assets && pickerResult.assets.length > 0) {
         const asset = pickerResult.assets[0];
-        const fileName = asset.name || `receipt_doc_${Date.now()}`;
-        const isPdf = fileName.toLowerCase().endsWith('.pdf');
+        const fileName = asset.name || `statement_${Date.now()}.pdf`;
+
+        if (!fileName.toLowerCase().endsWith('.pdf')) {
+          setValidationError('Please select a valid PDF statement file.');
+          return;
+        }
 
         const file: ReceiptFile = {
           uri: asset.uri,
           name: fileName,
-          mimeType: asset.mimeType || (isPdf ? 'application/pdf' : 'image/jpeg'),
+          mimeType: 'application/pdf',
           size: asset.size,
           source: 'document',
         };
@@ -177,62 +102,60 @@ export default function ScanScreen() {
     }
   };
 
-  // 4. Upload submission
-  const handleUpload = async () => {
+  const handleImportAndReview = async () => {
     if (!selectedFile) return;
 
-    setServerError(null);
-    try {
-      const response = await uploadReceipt(selectedFile);
-      setSuccessResponse(response);
-      setSelectedFile(null);
-    } catch (err: any) {
-      const message = getApiErrorMessage(err);
-      setServerError(message);
-    }
-  };
-
-  // 5. Phase 6 Text Extraction
-  const handleExtractText = async () => {
-    if (!selectedFile) return;
-
-    setServerError(null);
     setValidationError(null);
     setIsExtracting(true);
     fileLifecycleService.setProcessing(true);
-    setExtractionProgress({ step: 'preparing', message: 'Starting extraction...' });
+    setExtractionProgress({ step: 'preparing', message: 'Reading statement...' });
 
     const token: CancellationToken = { aborted: false };
     setCancellationTokenState(token);
 
     try {
-      const service = new ReceiptExtractionService();
-      let lastReportedPage = -1;
-      let lastReportedStep = '';
-
-      const result = await service.extract(
+      const extractionService = new ReceiptExtractionService();
+      const result = await extractionService.extract(
         selectedFile,
-        progress => {
-          // Throttle progress updates to avoid excessive re-renders during multi-page OCR
-          if (
-            progress.step !== lastReportedStep ||
-            (progress.currentPage !== undefined && progress.currentPage !== lastReportedPage)
-          ) {
-            lastReportedStep = progress.step;
-            lastReportedPage = progress.currentPage ?? -1;
-            setExtractionProgress(progress);
-          }
-        },
+        (progress) => setExtractionProgress(progress),
         token
       );
 
-      setExtractionResult(result);
-      setExtractionModalVisible(true);
+      if (!result.rawText || result.rawText.trim().length === 0) {
+        throw new Error('No readable text found in the PDF. Please ensure the PDF is not password-protected.');
+      }
+
+      setExtractionProgress({ step: 'classifying', message: 'Identifying transactions...' });
+
+      const interpretationService = new ReceiptInterpretationService();
+      const parsed = await interpretationService.interpret(result, {
+        rules,
+        categories,
+        existingTransactions,
+        friends,
+      });
+
+      if (parsed.candidates.length > 0) {
+        statementCandidateStore.setSession(
+          parsed.candidates,
+          parsed.statementMetadata,
+          parsed.warnings,
+          selectedFile.uri
+        );
+        setSelectedFile(null);
+        router.push('/receipt-review/statement' as any);
+      } else {
+        await fileLifecycleService.cleanupActiveSourceFile().catch(() => {});
+        Alert.alert(
+          'No Transactions Detected',
+          'Could not find supported UPI transaction patterns in this PDF. Please verify this is an official statement from Google Pay, Paytm, or PhonePe.'
+        );
+      }
     } catch (err: any) {
       if (token.aborted || /cancelled/i.test(err?.message || '')) {
-        setValidationError('Text extraction cancelled.');
+        setValidationError('Statement import cancelled.');
       } else {
-        setValidationError(err?.message || 'Failed to extract text from document.');
+        setValidationError(err?.message || 'Failed to process statement PDF.');
       }
     } finally {
       setIsExtracting(false);
@@ -250,46 +173,6 @@ export default function ScanScreen() {
     setExtractionProgress(null);
   };
 
-  const handleInterpretAndReview = async (resultToInterpret?: ReceiptExtractionResult | null) => {
-    const res = resultToInterpret || extractionResult;
-    if (!res || !res.rawText) return;
-
-    try {
-      const interpretationService = new ReceiptInterpretationService();
-      const parsed = await interpretationService.interpret(res, {
-        rules,
-        categories,
-        existingTransactions,
-        friends,
-      });
-
-      if (parsed.candidates.length > 0) {
-        statementCandidateStore.setSession(
-          parsed.candidates,
-          parsed.statementMetadata,
-          parsed.warnings,
-          selectedFile?.uri
-        );
-        setExtractionModalVisible(false);
-        router.push('/receipt-review/statement' as any);
-      } else {
-        await fileLifecycleService.cleanupActiveSourceFile().catch(() => {});
-        setSelectedFile(null);
-        Alert.alert(
-          'No Candidates Detected',
-          'Could not segment individual transaction candidates from the document text.'
-        );
-      }
-    } catch (err: any) {
-      await fileLifecycleService.cleanupActiveSourceFile().catch(() => {});
-      setSelectedFile(null);
-      Alert.alert(
-        'Interpretation Error',
-        err?.message || 'Failed to interpret transaction candidates.'
-      );
-    }
-  };
-
   const handleReset = () => {
     if (cancellationToken) {
       cancellationToken.aborted = true;
@@ -297,21 +180,24 @@ export default function ScanScreen() {
     fileLifecycleService.cleanupActiveSourceFile().catch(() => {});
     setSelectedFile(null);
     setValidationError(null);
-    setServerError(null);
-    setSuccessResponse(null);
-    setExtractionResult(null);
     setIsExtracting(false);
     setExtractionProgress(null);
-    resetUploadMutation();
+  };
+
+  const formatFileSize = (bytes?: number) => {
+    if (!bytes) return 'Unknown size';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
   return (
     <ScreenContainer scrollable>
       {/* Screen Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>Scan Receipt</Text>
+        <Text style={styles.title}>UPI Statement Import</Text>
         <Text style={styles.subtitle}>
-          Capture UPI payment screenshots or upload receipts for automated processing.
+          Import monthly statements from Google Pay, Paytm, or PhonePe directly into your local budget.
         </Text>
       </View>
 
@@ -323,167 +209,116 @@ export default function ScanScreen() {
         />
       )}
 
-      {/* Backend API Error Banner (preserves session, stays on screen) */}
-      {serverError && (
-        <ErrorMessage
-          message={serverError}
-          style={styles.errorBanner}
-        />
-      )}
-
-      {/* SUCCESS STATE */}
-      {successResponse ? (
-        <Card style={styles.successCard}>
-          <View style={styles.successIconCircle}>
-            <CheckCircle2 color={colors.brandLight} size={48} />
+      {selectedFile ? (
+        /* Selected File Ready State */
+        <Card style={styles.selectedCard}>
+          <View style={styles.fileIconCircle}>
+            <FileText color={colors.brandLight} size={36} />
           </View>
-          <Text style={styles.successTitle}>Receipt Uploaded Successfully</Text>
-          <Text style={styles.successSubtitle}>
-            A draft transaction #{successResponse.transaction.id} has been created with status{' '}
-            <Text style={styles.pendingHighlight}>Pending Review</Text>.
+          <Text style={styles.fileName} numberOfLines={2}>
+            {selectedFile.name}
+          </Text>
+          <Text style={styles.fileMeta}>
+            PDF Document • {formatFileSize(selectedFile.size)}
           </Text>
 
-          <View style={styles.summaryBox}>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Transaction ID</Text>
-              <Text style={styles.summaryValue}>#{successResponse.transaction.id}</Text>
+          {isExtracting ? (
+            <View style={styles.extractingContainer}>
+              <LoadingSpinner
+                size="large"
+                label={extractionProgress?.message || 'Parsing statement...'}
+              />
+              <Button
+                title="Cancel"
+                variant="ghost"
+                onPress={handleCancelExtraction}
+                style={styles.cancelExtractButton}
+              />
             </View>
-            <View style={styles.divider} />
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Merchant</Text>
-              <Text style={styles.summaryValue} numberOfLines={1}>
-                {successResponse.transaction.merchant?.clean_name ||
-                  successResponse.transaction.merchant_raw_name ||
-                  'Draft Receipt'}
-              </Text>
+          ) : (
+            <View style={styles.actionGroup}>
+              <Button
+                title="Import & Review Transactions"
+                icon={<ArrowRight color="#FFFFFF" size={18} />}
+                onPress={handleImportAndReview}
+                variant="primary"
+                style={styles.primaryActionButton}
+              />
+              <Button
+                title="Choose Another PDF"
+                icon={<RotateCcw color={colors.textSecondary} size={16} />}
+                onPress={handleReset}
+                variant="outline"
+                style={styles.secondaryActionButton}
+              />
             </View>
-            <View style={styles.divider} />
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Status</Text>
-              <Text style={styles.summaryValue}>{successResponse.transaction.status}</Text>
-            </View>
-          </View>
-
-          <View style={styles.successActions}>
-            <Button
-              title="Review & Confirm Receipt"
-              icon={<ArrowRight color={colors.background} size={18} />}
-              onPress={() => router.push(`/receipt-review/${successResponse.transaction.id}` as any)}
-              variant="primary"
-              style={styles.actionButton}
-            />
-            <Button
-              title="View Transaction Details"
-              onPress={() => router.push(`/transaction/${successResponse.transaction.id}` as any)}
-              variant="secondary"
-              style={styles.actionButton}
-            />
-            <Button
-              title="Scan Another Receipt"
-              icon={<RotateCcw color={colors.textSecondary} size={16} />}
-              onPress={handleReset}
-              variant="ghost"
-              style={styles.actionButton}
-            />
-          </View>
+          )}
         </Card>
-      ) : selectedFile ? (
-        /* PREVIEW STATE */
-        <ReceiptPreview
-          file={selectedFile}
-          isUploading={isUploading}
-          uploadProgress={uploadProgress}
-          onUpload={handleUpload}
-          onReplace={handleReset}
-          onCancel={handleReset}
-          onExtractText={handleExtractText}
-          isExtracting={isExtracting}
-          extractionProgress={extractionProgress}
-          onCancelExtraction={handleCancelExtraction}
-        />
       ) : (
-        /* INPUT SELECTION STATE */
-        <View style={styles.optionsContainer}>
+        /* Document Picker Entry State */
+        <View style={styles.mainContainer}>
           <Card style={styles.heroCard}>
             <View style={styles.heroIconCircle}>
-              <ScanLine color={colors.brand} size={36} />
+              <Upload color={colors.brand} size={36} />
             </View>
-            <Text style={styles.heroTitle}>Select Receipt Source</Text>
+            <Text style={styles.heroTitle}>Select Monthly Statement</Text>
             <Text style={styles.heroDescription}>
-              Supported formats: JPEG, PNG, WebP images, or PDF receipts (max 10 MB).
+              Select an official monthly UPI statement in PDF format to automatically extract transactions.
             </Text>
+
+            <Button
+              title="Select PDF Statement"
+              icon={<FileText color="#FFFFFF" size={18} />}
+              onPress={handleDocumentPick}
+              style={styles.selectButton}
+            />
           </Card>
 
-          {/* Option 1: Take Photo */}
-          <TouchableOpacity
-            style={styles.optionCard}
-            onPress={handleCameraCapture}
-            activeOpacity={0.8}
-          >
-            <View style={[styles.optionIconCircle, styles.cameraBg]}>
-              <Camera color={colors.brandLight} size={24} />
-            </View>
-            <View style={styles.optionContent}>
-              <Text style={styles.optionTitle}>Take Photo</Text>
-              <Text style={styles.optionSubtitle}>
-                Use camera to capture physical receipt or screen
-              </Text>
-            </View>
-            <ArrowRight color={colors.textMuted} size={18} />
-          </TouchableOpacity>
+          {/* Supported Providers Card */}
+          <Card style={styles.providersCard}>
+            <Text style={styles.sectionHeading}>Supported Formats</Text>
 
-          {/* Option 2: Photo Library */}
-          <TouchableOpacity
-            style={styles.optionCard}
-            onPress={handleGalleryPick}
-            activeOpacity={0.8}
-          >
-            <View style={[styles.optionIconCircle, styles.galleryBg]}>
-              <Images color={colors.info} size={24} />
+            <View style={styles.providerRow}>
+              <CheckCircle2 color={colors.brandLight} size={18} style={styles.checkIcon} />
+              <View style={styles.providerInfo}>
+                <Text style={styles.providerName}>Google Pay UPI Statement</Text>
+                <Text style={styles.providerDesc}>Monthly activity statement PDF</Text>
+              </View>
             </View>
-            <View style={styles.optionContent}>
-              <Text style={styles.optionTitle}>Choose from Photos</Text>
-              <Text style={styles.optionSubtitle}>
-                Select UPI screenshots from your photo library
-              </Text>
-            </View>
-            <ArrowRight color={colors.textMuted} size={18} />
-          </TouchableOpacity>
 
-          {/* Option 3: Document / PDF */}
-          <TouchableOpacity
-            style={styles.optionCard}
-            onPress={handleDocumentPick}
-            activeOpacity={0.8}
-          >
-            <View style={[styles.optionIconCircle, styles.documentBg]}>
-              <FileText color={colors.warning} size={24} />
+            <View style={styles.divider} />
+
+            <View style={styles.providerRow}>
+              <CheckCircle2 color={colors.brandLight} size={18} style={styles.checkIcon} />
+              <View style={styles.providerInfo}>
+                <Text style={styles.providerName}>Paytm UPI Statement</Text>
+                <Text style={styles.providerDesc}>Monthly or date-range transaction statement PDF</Text>
+              </View>
             </View>
-            <View style={styles.optionContent}>
-              <Text style={styles.optionTitle}>Choose PDF / Document</Text>
-              <Text style={styles.optionSubtitle}>
-                Select digital payment receipts or invoices
-              </Text>
+
+            <View style={styles.divider} />
+
+            <View style={styles.providerRow}>
+              <CheckCircle2 color={colors.brandLight} size={18} style={styles.checkIcon} />
+              <View style={styles.providerInfo}>
+                <Text style={styles.providerName}>PhonePe Statement</Text>
+                <Text style={styles.providerDesc}>Official monthly account statement PDF</Text>
+              </View>
             </View>
-            <ArrowRight color={colors.textMuted} size={18} />
-          </TouchableOpacity>
+          </Card>
+
+          {/* Privacy & Offline Guarantee Card */}
+          <Card style={styles.privacyCard}>
+            <View style={styles.privacyHeader}>
+              <ShieldCheck color={colors.brandLight} size={20} style={{ marginRight: spacing.xs }} />
+              <Text style={styles.privacyTitle}>100% Offline & Private</Text>
+            </View>
+            <Text style={styles.privacyText}>
+              Statements are processed completely on your device using client-side PDF parsing. Your financial records are never uploaded to any cloud server.
+            </Text>
+          </Card>
         </View>
       )}
-
-      {/* Camera Capture Modal */}
-      <CameraCaptureModal
-        visible={cameraModalVisible}
-        onCapture={handleSelectFile}
-        onClose={() => setCameraModalVisible(false)}
-      />
-
-      {/* Phase 6 & 7 Extraction & Review Modal */}
-      <ExtractionResultModal
-        visible={extractionModalVisible}
-        result={extractionResult}
-        onClose={() => setExtractionModalVisible(false)}
-        onReviewCandidates={() => handleInterpretAndReview(extractionResult)}
-      />
     </ScreenContainer>
   );
 }
@@ -495,7 +330,7 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.text,
-    fontSize: fontSizes.xxxl,
+    fontSize: fontSizes.xxl,
     fontWeight: fontWeights.bold,
   },
   subtitle: {
@@ -507,7 +342,7 @@ const styles = StyleSheet.create({
   errorBanner: {
     marginBottom: spacing.md,
   },
-  optionsContainer: {
+  mainContainer: {
     gap: spacing.md,
     marginBottom: spacing.xxl,
   },
@@ -516,12 +351,11 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: spacing.xl,
     alignItems: 'center',
-    marginBottom: spacing.xs,
   },
   heroIconCircle: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     backgroundColor: 'rgba(16, 185, 129, 0.12)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -531,124 +365,124 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: fontSizes.lg,
     fontWeight: fontWeights.bold,
-    marginBottom: 4,
+    marginBottom: 6,
+    textAlign: 'center',
   },
   heroDescription: {
-    color: colors.textSecondary,
-    fontSize: fontSizes.xs,
-    textAlign: 'center',
-    maxWidth: 280,
-  },
-  optionCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: spacing.md,
-  },
-  optionIconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: spacing.md,
-  },
-  cameraBg: {
-    backgroundColor: 'rgba(16, 185, 129, 0.12)',
-  },
-  galleryBg: {
-    backgroundColor: 'rgba(59, 130, 246, 0.12)',
-  },
-  documentBg: {
-    backgroundColor: 'rgba(245, 158, 11, 0.12)',
-  },
-  optionContent: {
-    flex: 1,
-    marginRight: spacing.sm,
-  },
-  optionTitle: {
-    color: colors.text,
-    fontSize: fontSizes.base,
-    fontWeight: fontWeights.semibold,
-    marginBottom: 2,
-  },
-  optionSubtitle: {
-    color: colors.textSecondary,
-    fontSize: fontSizes.xs,
-    lineHeight: 16,
-  },
-  successCard: {
-    backgroundColor: colors.surface,
-    borderColor: 'rgba(16, 185, 129, 0.3)',
-    padding: spacing.xl,
-    alignItems: 'center',
-    marginBottom: spacing.xxl,
-  },
-  successIconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(16, 185, 129, 0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.md,
-  },
-  successTitle: {
-    color: colors.text,
-    fontSize: fontSizes.xl,
-    fontWeight: fontWeights.bold,
-    textAlign: 'center',
-    marginBottom: spacing.xs,
-  },
-  successSubtitle: {
     color: colors.textSecondary,
     fontSize: fontSizes.sm,
     textAlign: 'center',
     lineHeight: 20,
     marginBottom: spacing.lg,
+    maxWidth: 300,
   },
-  pendingHighlight: {
-    color: colors.warning,
-    fontWeight: fontWeights.bold,
+  selectButton: {
+    minWidth: 220,
   },
-  summaryBox: {
-    backgroundColor: colors.surfaceElevated,
+  providersCard: {
+    backgroundColor: colors.surface,
     borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: 8,
-    width: '100%',
-    paddingHorizontal: spacing.md,
-    marginBottom: spacing.xl,
+    padding: spacing.md,
   },
-  summaryRow: {
+  sectionHeading: {
+    color: colors.textMuted,
+    fontSize: fontSizes.xs,
+    fontWeight: fontWeights.semibold,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: spacing.sm,
+  },
+  providerRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: spacing.sm + 2,
+    paddingVertical: spacing.xs,
   },
-  summaryLabel: {
-    color: colors.textSecondary,
-    fontSize: fontSizes.sm,
+  checkIcon: {
+    marginRight: spacing.sm,
   },
-  summaryValue: {
+  providerInfo: {
+    flex: 1,
+  },
+  providerName: {
     color: colors.text,
     fontSize: fontSizes.sm,
     fontWeight: fontWeights.medium,
-    maxWidth: '60%',
-    textAlign: 'right',
+  },
+  providerDesc: {
+    color: colors.textMuted,
+    fontSize: fontSizes.xs,
+    marginTop: 1,
   },
   divider: {
     height: 1,
     backgroundColor: colors.borderMuted,
+    marginVertical: spacing.xs,
   },
-  successActions: {
+  privacyCard: {
+    backgroundColor: colors.surfaceElevated,
+    borderColor: colors.border,
+    padding: spacing.md,
+  },
+  privacyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  privacyTitle: {
+    color: colors.text,
+    fontSize: fontSizes.sm,
+    fontWeight: fontWeights.semibold,
+  },
+  privacyText: {
+    color: colors.textSecondary,
+    fontSize: fontSizes.xs,
+    lineHeight: 18,
+  },
+  selectedCard: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    padding: spacing.xl,
+    alignItems: 'center',
+    marginBottom: spacing.xxl,
+  },
+  fileIconCircle: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.md,
+  },
+  fileName: {
+    color: colors.text,
+    fontSize: fontSizes.base,
+    fontWeight: fontWeights.bold,
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  fileMeta: {
+    color: colors.textMuted,
+    fontSize: fontSizes.xs,
+    marginBottom: spacing.xl,
+  },
+  actionGroup: {
     width: '100%',
     gap: spacing.sm,
   },
-  actionButton: {
+  primaryActionButton: {
     width: '100%',
+  },
+  secondaryActionButton: {
+    width: '100%',
+    borderColor: colors.border,
+  },
+  extractingContainer: {
+    width: '100%',
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+  },
+  cancelExtractButton: {
+    marginTop: spacing.md,
   },
 });

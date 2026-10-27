@@ -18,18 +18,21 @@ import {
   Edit2,
   Trash2,
   ReceiptText,
-  FileCheck,
   Tag,
   Store,
   Calendar,
   Clock,
   Hash,
+  ArrowDownLeft,
+  ArrowUpRight,
+  CreditCard,
+  Users,
+  Wallet,
 } from 'lucide-react-native';
 import { ScreenContainer } from '../../src/components/common/ScreenContainer';
 import { Card } from '../../src/components/ui/Card';
 import { LoadingSpinner } from '../../src/components/ui/LoadingSpinner';
 import { EmptyState } from '../../src/components/common/EmptyState';
-import { TransactionStatusBadge } from '../../src/components/transactions/TransactionStatusBadge';
 import { useTransaction } from '../../src/hooks/useTransaction';
 import { useDeleteTransaction } from '../../src/hooks/useTransactionMutations';
 import { colors } from '../../src/theme/colors';
@@ -130,6 +133,14 @@ export default function TransactionDetailScreen() {
   const categoryName = tx.category?.name || 'Uncategorized';
   const categoryColor = tx.category?.color || colors.textMuted;
 
+  const isReceived = tx.direction === 'RECEIVED';
+  const isReimbursement = Boolean(tx.is_reimbursement);
+  const totalAmount = typeof tx.amount === 'string' ? parseFloat(tx.amount) : tx.amount;
+  const paidForOthers =
+    tx.amount_paid_for_someone_else != null ? parseFloat(String(tx.amount_paid_for_someone_else)) : 0;
+  const personalShare = Math.max(0, totalAmount - paidForOthers);
+  const hasSplit = paidForOthers > 0;
+
   // Has optional payment metadata?
   const hasPaymentMetadata = Boolean(tx.upi_reference_id || tx.upi_vpa || tx.payment_app);
 
@@ -160,12 +171,33 @@ export default function TransactionDetailScreen() {
         </View>
       </View>
 
-      {/* Main Hero Card: Amount & Status */}
+      {/* Main Hero Card: Amount & Direction */}
       <Card style={styles.heroCard}>
         <Text style={styles.currencyLabel}>{tx.currency}</Text>
         <Text style={styles.amountDisplay}>{formatCurrency(tx.amount)}</Text>
-        <View style={styles.statusBadgeContainer}>
-          <TransactionStatusBadge status={tx.status} size="md" />
+        <View
+          style={[
+            styles.typePill,
+            isReceived ? styles.typePillIncoming : styles.typePillOutgoing,
+          ]}
+        >
+          {isReceived ? (
+            <ArrowDownLeft size={14} color={isReimbursement ? colors.brandLight : colors.success} />
+          ) : (
+            <ArrowUpRight size={14} color={colors.textSecondary} />
+          )}
+          <Text
+            style={[
+              styles.typePillText,
+              isReceived ? styles.typePillTextIncoming : styles.typePillTextOutgoing,
+            ]}
+          >
+            {isReimbursement
+              ? 'Incoming Reimbursement'
+              : isReceived
+              ? 'Incoming Money'
+              : 'Outgoing Spending'}
+          </Text>
         </View>
       </Card>
 
@@ -208,24 +240,57 @@ export default function TransactionDetailScreen() {
 
         <View style={styles.divider} />
 
-        {/* Receipt Attached */}
+        {/* Transaction Type */}
         <View style={styles.row}>
           <View style={styles.labelGroup}>
-            <FileCheck
-              color={tx.has_receipt ? colors.brandLight : colors.textMuted}
-              size={16}
-            />
-            <Text style={styles.rowLabel}>Receipt</Text>
+            <CreditCard color={colors.textSecondary} size={16} />
+            <Text style={styles.rowLabel}>Type</Text>
           </View>
-          <Text
-            style={[
-              styles.rowValue,
-              tx.has_receipt ? styles.receiptYes : styles.receiptNo,
-            ]}
-          >
-            {tx.has_receipt ? 'Attached' : 'None'}
+          <Text style={styles.rowValue}>
+            {isReimbursement ? 'Reimbursement' : isReceived ? 'Income / Inflow' : 'Personal Expense'}
           </Text>
         </View>
+
+        {/* Paid for Others Split Breakdown */}
+        {hasSplit && (
+          <>
+            <View style={styles.divider} />
+            <View style={styles.row}>
+              <View style={styles.labelGroup}>
+                <Users color={colors.warning} size={16} />
+                <Text style={styles.rowLabel}>Paid for Others</Text>
+              </View>
+              <Text style={styles.rowValue}>{formatCurrency(paidForOthers)}</Text>
+            </View>
+
+            <View style={styles.divider} />
+            <View style={styles.row}>
+              <View style={styles.labelGroup}>
+                <Wallet color={colors.brandLight} size={16} />
+                <Text style={styles.rowLabel}>Your Personal Share</Text>
+              </View>
+              <Text style={[styles.rowValue, styles.highlightValue]}>
+                {formatCurrency(personalShare)}
+              </Text>
+            </View>
+          </>
+        )}
+
+        {/* Friend / Contact Information */}
+        {(tx.friend || isReimbursement) && (
+          <>
+            <View style={styles.divider} />
+            <View style={styles.row}>
+              <View style={styles.labelGroup}>
+                <Users color={colors.brandLight} size={16} />
+                <Text style={styles.rowLabel}>Friend / Contact</Text>
+              </View>
+              <Text style={styles.rowValue}>
+                {tx.friend?.name || tx.friend?.recognized_name || 'Matched Reimbursement'}
+              </Text>
+            </View>
+          </>
+        )}
       </Card>
 
       {/* Notes Section - Render ONLY if notes is present */}
@@ -427,12 +492,36 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: colors.borderMuted,
   },
-  receiptYes: {
-    color: colors.brandLight,
+  typePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  typePillIncoming: {
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+  },
+  typePillOutgoing: {
+    backgroundColor: colors.surfaceElevated,
+    borderColor: colors.borderMuted,
+  },
+  typePillText: {
+    fontSize: fontSizes.xs,
     fontWeight: fontWeights.semibold,
   },
-  receiptNo: {
-    color: colors.textMuted,
+  typePillTextIncoming: {
+    color: colors.brandLight,
+  },
+  typePillTextOutgoing: {
+    color: colors.textSecondary,
+  },
+  highlightValue: {
+    color: colors.brandLight,
+    fontWeight: fontWeights.bold,
   },
   notesText: {
     color: colors.text,

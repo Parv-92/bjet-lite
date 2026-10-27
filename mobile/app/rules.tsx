@@ -20,16 +20,17 @@ import {
   Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ChevronLeft, Plus, Search, X } from 'lucide-react-native';
+import { ChevronLeft, Plus, Search, X, Sparkles, Tag } from 'lucide-react-native';
 import { ScreenContainer } from '../src/components/common/ScreenContainer';
 import { MerchantRuleCard } from '../src/components/rules/MerchantRuleCard';
-import { RuleExplanation } from '../src/components/rules/RuleExplanation';
+import { CategoryPickerModal } from '../src/components/transactions/CategoryPickerModal';
 import { LoadingSpinner } from '../src/components/ui/LoadingSpinner';
 import { ErrorMessage } from '../src/components/ui/ErrorMessage';
 import { Button } from '../src/components/ui/Button';
-import { useMerchantRules } from '../src/hooks/useMerchantRules';
-import { useDeleteMerchantRule } from '../src/hooks/useMerchantRuleMutations';
+import { useMerchantRules, useUncategorizedMerchants } from '../src/hooks/useMerchantRules';
+import { useDeleteMerchantRule, useCategorizeMerchantTransactions } from '../src/hooks/useMerchantRuleMutations';
 import { UserMerchantRule } from '../src/types/rules';
+import { Category } from '../src/types/api';
 import { getApiErrorMessage } from '../src/api/client';
 import { colors } from '../src/theme/colors';
 import { spacing, radii } from '../src/theme/spacing';
@@ -38,10 +39,17 @@ import { fontSizes, fontWeights } from '../src/theme/typography';
 export default function MerchantRulesScreen() {
   const router = useRouter();
   const { data: rules, isLoading, error, refetch, isRefetching } = useMerchantRules();
+  const { data: uncategorizedMerchants, refetch: refetchUncategorized } = useUncategorizedMerchants();
   const deleteMutation = useDeleteMerchantRule();
+  const categorizeMutation = useCategorizeMerchantTransactions();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [selectedUncatMerchant, setSelectedUncatMerchant] = useState<{
+    merchant_name: string;
+    count: number;
+  } | null>(null);
+  const [categoryPickerVisible, setCategoryPickerVisible] = useState(false);
 
   const filteredRules = useMemo(() => {
     if (!rules) return [];
@@ -86,6 +94,47 @@ export default function MerchantRulesScreen() {
     );
   };
 
+  const handleSelectUncatMerchant = (merchant: { merchant_name: string; count: number }) => {
+    setSelectedUncatMerchant(merchant);
+    setCategoryPickerVisible(true);
+  };
+
+  const handleCategorySelected = (category: Category | null) => {
+    setCategoryPickerVisible(false);
+    if (!category || !selectedUncatMerchant) return;
+
+    const { merchant_name, count } = selectedUncatMerchant;
+    Alert.alert(
+      `Set Default for "${merchant_name}"`,
+      `Apply "${category.name}" to all ${count} existing uncategorized transaction${count === 1 ? '' : 's'}?\n\nThis will also save "${merchant_name}" as your default merchant rule for future transactions.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: `Categorize ${count} Transaction${count === 1 ? '' : 's'}`,
+          onPress: async () => {
+            try {
+              const res = await categorizeMutation.mutateAsync({
+                merchantPattern: merchant_name,
+                categoryId: category.id,
+                saveRule: true,
+              });
+              Alert.alert(
+                'Categorization Saved',
+                `Successfully categorized ${res.updatedCount} transaction${res.updatedCount === 1 ? '' : 's'} as "${category.name}" and saved merchant rule.`
+              );
+            } catch (err) {
+              Alert.alert('Error', getApiErrorMessage(err));
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleRefresh = async () => {
+    await Promise.all([refetch(), refetchUncategorized()]);
+  };
+
   return (
     <ScreenContainer scrollable={false}>
       {/* Top Header */}
@@ -115,6 +164,13 @@ export default function MerchantRulesScreen() {
           <Plus size={16} color="#FFFFFF" style={styles.plusIcon} />
           <Text style={styles.newButtonText}>New Rule</Text>
         </TouchableOpacity>
+      </View>
+
+      {/* Explanatory Banner */}
+      <View style={styles.explainerBanner}>
+        <Text style={styles.explainerText}>
+          Transactions matching this merchant will use the selected category by default.
+        </Text>
       </View>
 
       {/* Search Bar */}
@@ -159,14 +215,48 @@ export default function MerchantRulesScreen() {
           refreshControl={
             <RefreshControl
               refreshing={isRefetching}
-              onRefresh={refetch}
+              onRefresh={handleRefresh}
               tintColor={colors.brand}
               colors={[colors.brand]}
             />
           }
         >
-          {/* Collapsible Hierarchy Explanation */}
-          <RuleExplanation collapsible />
+          {/* Uncategorized Merchants Bulk Workflow */}
+          {uncategorizedMerchants && uncategorizedMerchants.length > 0 && !searchQuery.trim() && (
+            <View style={styles.uncatSection}>
+              <View style={styles.sectionHeader}>
+                <View style={styles.sectionHeaderLeft}>
+                  <Sparkles size={16} color={colors.brandLight} style={{ marginRight: 6 }} />
+                  <Text style={styles.sectionTitle}>
+                    Needs Categorization ({uncategorizedMerchants.length})
+                  </Text>
+                </View>
+                <Text style={styles.sectionSubtitle}>Tap to set category</Text>
+              </View>
+
+              {uncategorizedMerchants.map((item) => (
+                <TouchableOpacity
+                  key={`uncat-${item.merchant_name}`}
+                  style={styles.uncatCard}
+                  onPress={() => handleSelectUncatMerchant(item)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.uncatInfo}>
+                    <Text style={styles.uncatName} numberOfLines={1}>
+                      {item.merchant_name}
+                    </Text>
+                    <Text style={styles.uncatCount}>
+                      {item.count} uncategorized transaction{item.count === 1 ? '' : 's'}
+                    </Text>
+                  </View>
+                  <View style={styles.uncatBadge}>
+                    <Tag size={12} color={colors.brandLight} style={{ marginRight: 4 }} />
+                    <Text style={styles.uncatBadgeText}>Set Category</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
 
           {/* Section Header with Rule Count */}
           <View style={styles.sectionHeader}>
@@ -188,7 +278,7 @@ export default function MerchantRulesScreen() {
                   You haven't created any custom merchant rules yet.
                 </Text>
                 <Text style={styles.emptySubtitle}>
-                  Bjet uses these rules to automatically suggest your preferred category when the same merchant or UPI ID appears again.
+                  Set a default category for frequent merchants to auto-categorize incoming transactions.
                 </Text>
                 <Button
                   title="+ Create Merchant Rule"
@@ -211,6 +301,14 @@ export default function MerchantRulesScreen() {
           )}
         </ScrollView>
       )}
+
+      {/* Category Picker Modal */}
+      <CategoryPickerModal
+        visible={categoryPickerVisible}
+        selectedCategoryId={null}
+        onSelect={handleCategorySelected}
+        onClose={() => setCategoryPickerVisible(false)}
+      />
     </ScreenContainer>
   );
 }
@@ -309,6 +407,70 @@ const styles = StyleSheet.create({
   orderLabel: {
     color: colors.textMuted,
     fontSize: fontSizes.xs,
+  },
+  explainerBanner: {
+    backgroundColor: colors.surfaceElevated,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  explainerText: {
+    color: colors.textSecondary,
+    fontSize: fontSizes.xs,
+    lineHeight: 18,
+  },
+  uncatSection: {
+    marginBottom: spacing.lg,
+  },
+  sectionHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  sectionSubtitle: {
+    color: colors.textMuted,
+    fontSize: fontSizes.xs,
+  },
+  uncatCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surface,
+    borderColor: 'rgba(16, 185, 129, 0.25)',
+    borderWidth: 1,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    marginBottom: spacing.xs,
+  },
+  uncatInfo: {
+    flex: 1,
+    marginRight: spacing.sm,
+  },
+  uncatName: {
+    color: colors.text,
+    fontSize: fontSizes.base,
+    fontWeight: fontWeights.bold,
+    marginBottom: 2,
+  },
+  uncatCount: {
+    color: colors.brandLight,
+    fontSize: fontSizes.xs,
+    fontWeight: fontWeights.medium,
+  },
+  uncatBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radii.sm,
+  },
+  uncatBadgeText: {
+    color: colors.brandLight,
+    fontSize: fontSizes.xs,
+    fontWeight: fontWeights.semibold,
   },
   emptyFiltered: {
     padding: spacing.xl,

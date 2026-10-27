@@ -1,9 +1,9 @@
 /**
- * Bjet Mobile - Merchant Rules Query Hook (Phase 10)
- * Fetches user merchant rules configured on backend for auto-categorization suggestions.
+ * Bjet Mobile - Merchant Rules Query Hook (Phase 10 / Bjet Lite)
+ * Fetches user merchant rules from local SQLite merchantRuleRepository.
  */
 import { useQuery } from '@tanstack/react-query';
-import { getMerchantRulesApi } from '../api/rules';
+import { merchantRuleRepository, transactionRepository } from '../repositories';
 import { UserMerchantRule } from '../types/rules';
 import { useAuth } from './useAuth';
 
@@ -16,7 +16,7 @@ export function useMerchantRules(options?: { enabled?: boolean }) {
 
   return useQuery<UserMerchantRule[], Error>({
     queryKey: ['rules', 'list'],
-    queryFn: getMerchantRulesApi,
+    queryFn: () => merchantRuleRepository.getAll(),
     staleTime: 5 * 60 * 1000,
     retry: 1,
     enabled: isAuthenticated && (options?.enabled ?? true),
@@ -32,12 +32,26 @@ export function useMerchantRule(id: number) {
 
   return useQuery<UserMerchantRule | null, Error>({
     queryKey: ['rules', 'detail', id],
-    queryFn: async () => {
-      const allRules = await getMerchantRulesApi();
-      return allRules.find((r) => r.id === id) || null;
-    },
+    queryFn: () => merchantRuleRepository.getById(id),
     staleTime: 5 * 60 * 1000,
     retry: 1,
     enabled: isAuthenticated && typeof id === 'number' && !isNaN(id) && id > 0,
   });
 }
+
+/**
+ * Hook to retrieve merchants with uncategorized transactions.
+ * Query key: ['merchants', 'uncategorized']
+ */
+export function useUncategorizedMerchants() {
+  const { isAuthenticated } = useAuth();
+
+  return useQuery<{ merchant_name: string; count: number }[], Error>({
+    queryKey: ['merchants', 'uncategorized'],
+    queryFn: () => transactionRepository.getUncategorizedMerchants(),
+    staleTime: 30_000,
+    retry: 1,
+    enabled: isAuthenticated,
+  });
+}
+

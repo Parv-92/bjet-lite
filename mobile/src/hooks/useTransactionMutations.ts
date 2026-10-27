@@ -19,9 +19,13 @@ export function useCreateTransaction() {
   return useMutation<TransactionDetailResponse, Error, CreateManualTransactionRequest>({
     mutationFn: (data: CreateManualTransactionRequest) =>
       transactionRepository.createTransaction(data),
-    onSuccess: () => {
+    onSuccess: (_, data) => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       queryClient.invalidateQueries({ queryKey: ['budgets', 'summary'] });
+      if (data.set_as_merchant_default) {
+        queryClient.invalidateQueries({ queryKey: ['rules'] });
+        queryClient.invalidateQueries({ queryKey: ['merchants'] });
+      }
       triggerAutoBackup({ reason: 'create transaction' });
     },
   });

@@ -1,0 +1,9 @@
+* [33mf266fed[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mbjet-lite[m[33m)[m feat(lite): add auto-backup on transaction and budget mutations
+* [33m9a09236[m fix(lite): revert multi-select categorization
+* [33mfecef78[m[33m ([m[1;33mtag: [m[1;33mv1.0.0-phaseA-baseline[m[33m, [m[1;32mmain[m[33m)[m chore(baseline): establish verified Bjet Phase A stable baseline
+* [33m9e73e9e[m fix(mobile): handle received reimbursements and UPI Lite top-ups
+* [33m6bac872[m fix(mobile): resolve Mozilla PDF.js compatibility issues in Hermes runtime
+* [33m7ad2ec9[m[33m ([m[1;31morigin/main[m[33m)[m Add frontend and mobile applications through Phase 10
+* [33m8b3a3b3[m Finalize backend API v0.3.0
+* [33m6221c98[m Set up FastAPI project structure
+* [33m1bb4e5c[m Initial commit

@@ -136,6 +136,7 @@ export interface CreateManualTransactionRequest {
   upi_vpa?: string | null;
   payment_app?: string | null;
   notes?: string | null;
+  set_as_merchant_default?: boolean;
   direction?: TransactionDirection;
   is_reimbursement?: boolean | null;
   friend_id?: number | null;

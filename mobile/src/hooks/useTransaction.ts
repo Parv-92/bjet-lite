@@ -1,10 +1,10 @@
 /**
- * Bjet Mobile - useTransaction Hook
- * Fetches single transaction details strictly adhering to TransactionDetailResponse.
+ * Bjet Lite - useTransaction Hook (Phase C5)
+ * Fetches single transaction details strictly adhering to TransactionDetailResponse from SQLite.
  */
 import { useQuery } from '@tanstack/react-query';
-import { getTransactionApi } from '../api/transactions';
-import { TransactionDetailResponse } from '../types/api';
+import { transactionRepository, NotFoundError } from '../repositories';
+import type { TransactionDetailResponse } from '../types/api';
 import { useAuth } from './useAuth';
 
 export function useTransaction(id: number) {
@@ -12,7 +12,13 @@ export function useTransaction(id: number) {
 
   return useQuery<TransactionDetailResponse, Error>({
     queryKey: ['transactions', id],
-    queryFn: () => getTransactionApi(id),
+    queryFn: async () => {
+      const tx = await transactionRepository.getTransactionById(id);
+      if (!tx) {
+        throw new NotFoundError(`Transaction with ID ${id} not found.`);
+      }
+      return tx;
+    },
     enabled: isAuthenticated && !!id && !isNaN(id) && id > 0,
     staleTime: 30 * 1000,
   });

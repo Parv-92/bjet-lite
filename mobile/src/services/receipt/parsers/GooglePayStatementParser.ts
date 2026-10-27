@@ -15,11 +15,11 @@
  * - Isolates row failures so partial parsing succeeds.
  */
 
-import {
+import type {
   TransactionCandidate,
   StatementMetadata,
 } from '../../../types/receiptInterpretation';
-import { IDocumentParser, ParsedDocument } from './types';
+import type { IDocumentParser, ParsedDocument } from './types';
 
 const MONTH_MAP: Record<string, string> = {
   jan: '01',

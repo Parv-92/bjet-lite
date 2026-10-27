@@ -11,8 +11,35 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { budgetRepository } from '../repositories';
 import { triggerAutoBackup } from '../services/backup';
-import type { Budget, BudgetSummary, MonthlySpendingBreakdown, SetBudgetRequest } from '../types/api';
+import type {
+  Budget,
+  BudgetSummary,
+  MonthlySpendingBreakdown,
+  SetBudgetRequest,
+} from '../types/api';
+import type { MonthlyFinancialSummary } from '../repositories/budgetRepository';
 import { useAuth } from './useAuth';
+
+/**
+ * Hook to retrieve full financial summary (personal spending, incoming money, net movement, budget usage)
+ * for a specific month and year.
+ * Query Key: ['budgets', 'financial-summary', month, year]
+ */
+export function useMonthlyFinancialSummary(
+  month: number,
+  year: number,
+  options?: { enabled?: boolean }
+) {
+  const { isAuthenticated } = useAuth();
+
+  return useQuery<MonthlyFinancialSummary, Error>({
+    queryKey: ['budgets', 'financial-summary', month, year],
+    queryFn: () => budgetRepository.getMonthlyFinancialSummary(month, year),
+    staleTime: 60_000,
+    retry: 1,
+    enabled: isAuthenticated && (options?.enabled ?? true),
+  });
+}
 
 /**
  * Hook to retrieve monthly spending breakdown by category for the pie chart.

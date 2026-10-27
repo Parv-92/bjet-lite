@@ -120,12 +120,12 @@ export const TransactionCard: React.FC<TransactionCardProps> = ({
             ]}
           >
             {isReceived ? (
-              <ArrowUpRight
+              <ArrowDownLeft
                 color={isReimbursement ? colors.brandLight : categoryColor}
                 size={18}
               />
             ) : (
-              <ArrowDownLeft color={categoryColor} size={18} />
+              <ArrowUpRight color={categoryColor} size={18} />
             )}
           </View>
 

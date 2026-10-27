@@ -18,64 +18,32 @@ import { fontSizes, fontWeights } from '../src/theme/typography';
 import { LoadingSpinner } from '../src/components/ui/LoadingSpinner';
 import { Button } from '../src/components/ui/Button';
 import { fileLifecycleService } from '../src/services/receipt';
+import { initDatabase } from '../src/db';
 
 function RouteGuard({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading, sessionError, retrySessionRestore, logout } = useAuth();
   const segments = useSegments();
   const router = useRouter();
 
   useEffect(() => {
-    if (isLoading || sessionError) return;
-
     const inAuthGroup = segments[0] === '(auth)';
-
-    if (!isAuthenticated && !inAuthGroup) {
-      // User is not authenticated; redirect to login
-      router.replace('/(auth)/login');
-    } else if (isAuthenticated && inAuthGroup) {
-      // User is authenticated; redirect to main tabs
+    // In Bjet Lite, the app is purely local-first and does not require authentication.
+    // If navigation inadvertently enters (auth), immediately redirect to main tabs.
+    if (inAuthGroup) {
       router.replace('/(tabs)');
     }
-  }, [isAuthenticated, isLoading, sessionError, segments, router]);
-
-  // Loading state during initial startup
-  if (isLoading) {
-    return (
-      <View style={styles.centerContainer}>
-        <LoadingSpinner size="large" label="Connecting to Bjet..." />
-      </View>
-    );
-  }
-
-  // Recoverable error state when network/server error occurs during session restoration
-  if (sessionError) {
-    return (
-      <View style={styles.errorContainer}>
-        <View style={styles.errorCard}>
-          <Text style={styles.errorTitle}>Connection Issue</Text>
-          <Text style={styles.errorMessage}>{sessionError}</Text>
-          <Button
-            title="Retry Connection"
-            onPress={retrySessionRestore}
-            variant="primary"
-            style={styles.retryButton}
-          />
-          <Button
-            title="Sign in with different account"
-            onPress={logout}
-            variant="ghost"
-            style={styles.switchButton}
-          />
-        </View>
-      </View>
-    );
-  }
+  }, [segments, router]);
 
   return <>{children}</>;
 }
 
+
 export default function RootLayout() {
   useEffect(() => {
+    // Eagerly initialize Bjet Lite SQLite database (applies migrations and seeds default categories)
+    initDatabase().catch(err => {
+      console.warn('[SQLite] Startup initialization warning:', err);
+    });
+
     // Startup sanitation sweep for stale Bjet temporary import artifacts (> 30 minutes)
     fileLifecycleService.sanitizeOrphans(30 * 60 * 1000).catch(err => {
       console.warn('[FileLifecycle] Startup sanitation warning:', err);

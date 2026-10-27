@@ -9,7 +9,7 @@
  * Statement candidates are strictly local and are NEVER sent to POST /transactions.
  */
 
-import {
+import type {
   TransactionCandidate,
   StatementMetadata,
   CandidatePersistenceStatus,

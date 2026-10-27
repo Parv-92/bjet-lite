@@ -7,9 +7,8 @@ import React from 'react';
 import { View, StyleSheet, Platform } from 'react-native';
 import { Tabs } from 'expo-router';
 import {
-  Home as HomeIcon,
+  FileText,
   ReceiptText,
-  Scan,
   PieChart,
   Settings as SettingsIcon,
 } from 'lucide-react-native';
@@ -44,8 +43,8 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
-          tabBarIcon: ({ color, size }) => <HomeIcon color={color} size={size || 22} />,
+          title: 'Budgets',
+          tabBarIcon: ({ color, size }) => <PieChart color={color} size={size || 22} />,
         }}
       />
       <Tabs.Screen
@@ -58,10 +57,10 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="scan"
         options={{
-          title: 'Scan',
+          title: 'Import',
           tabBarIcon: ({ focused }) => (
             <View style={[styles.elevatedScanButton, focused && styles.elevatedScanButtonActive]}>
-              <Scan color="#020617" size={24} strokeWidth={2.5} />
+              <FileText color="#020617" size={24} strokeWidth={2.5} />
             </View>
           ),
           tabBarLabel: () => null, // Hide text label to emphasize the elevated action
@@ -70,8 +69,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="budgets"
         options={{
-          title: 'Budgets',
-          tabBarIcon: ({ color, size }) => <PieChart color={color} size={size || 22} />,
+          href: null, // Hidden from tab bar, handled by merged overview
         }}
       />
       <Tabs.Screen

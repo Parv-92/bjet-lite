@@ -1,7 +1,7 @@
 /**
  * Bjet Mobile - Parser Interfaces (Phase 7)
  */
-import {
+import type {
   TransactionCandidate,
   StatementMetadata,
 } from '../../../types/receiptInterpretation';

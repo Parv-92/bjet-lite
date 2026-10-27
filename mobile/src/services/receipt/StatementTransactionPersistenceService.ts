@@ -1,26 +1,25 @@
 /**
- * Bjet Mobile - Statement Transaction Persistence Service (Phase 12B)
+ * Bjet Lite - Statement Transaction Persistence Service (Phase C8)
  *
- * Coordinates persisting reviewed statement candidates to the backend via POST /api/v1/transactions.
+ * Coordinates persisting reviewed statement candidates to the local SQLite database via transactionRepository.
  *
  * Core Guarantees:
- * 1. Hard Direction Boundary: Strictly persists 'SENT' expense candidates.
- *    Non-SENT candidates (RECEIVED inflows, TOP_UP wallet transfers) are strictly blocked.
- * 2. Backend Preflight Duplicate Check: Queries GET /api/v1/transactions across the statement
- *    window with mandatory pagination to intercept already-persisted UPI reference IDs.
- * 3. Controlled Concurrency: MAX_CONCURRENT_REQUESTS = 3 to protect local server and network.
+ * 1. Hard Direction Boundary: Strictly persists 'SENT' expense candidates or 'RECEIVED' reimbursement candidates.
+ *    Ordinary non-reimbursement inflows and TOP_UP wallet transfers are strictly blocked.
+ * 2. SQLite Preflight Duplicate Check: Queries local transactionRepository.findExistingUpiRefs
+ *    to intercept already-persisted UPI reference IDs.
+ * 3. Controlled Concurrency: MAX_CONCURRENT_REQUESTS = 3 for worker pool batch processing.
  * 4. Explicit Lifecycle State Machine:
  *    NOT_SUBMITTED -> SUBMITTING -> (PERSISTED | SKIPPED_DUPLICATE | FAILED).
- *    A candidate is only marked PERSISTED after HTTP 201 response with valid ID is returned.
- * 5. Category Fallback: Uses selectedCategoryId ?? suggestedCategoryId ?? null (backend auto-categorizes).
+ *    A candidate is only marked PERSISTED after successful insertion with a valid ID.
+ * 5. Category Fallback: Uses selectedCategoryId ?? suggestedCategoryId ?? null (repository auto-categorizes).
  */
 
-import {
-  createTransactionApi,
-  getTransactionsApi,
-} from '../../api/transactions';
-import { CreateManualTransactionRequest } from '../../types/api';
-import {
+import { transactionRepository } from '../../repositories';
+import type { ITransactionRepository } from '../../repositories/transactionRepository';
+import { triggerAutoBackup } from '../backup';
+import type { CreateManualTransactionRequest } from '../../types/api';
+import type {
   TransactionCandidate,
   CandidatePersistenceStatus,
 } from '../../types/receiptInterpretation';
@@ -45,6 +44,11 @@ export interface StatementPersistenceResult {
 
 export class StatementTransactionPersistenceService {
   private isPersisting = false;
+  private transactionRepo: ITransactionRepository;
+
+  constructor(transactionRepo: ITransactionRepository = transactionRepository) {
+    this.transactionRepo = transactionRepo;
+  }
 
   public getIsPersisting(): boolean {
     return this.isPersisting;
@@ -86,10 +90,13 @@ export class StatementTransactionPersistenceService {
         };
       }
 
-      // 2. Backend Preflight Duplicate Check (Layer 1)
-      const existingUpiRefs = await this.fetchExistingBackendUpiRefs(persistableCandidates);
+      // 2. Preflight Duplicate Check using local transactionRepository
+      const candidateRefs = persistableCandidates
+        .map(c => c.transactionReference?.trim())
+        .filter((ref): ref is string => Boolean(ref));
+      const existingUpiRefs = await this.transactionRepo.findExistingUpiRefs(candidateRefs);
 
-      // 3. Filter out duplicates (both from backend and in-batch duplicates)
+      // 3. Filter out duplicates (both from database and in-batch duplicates)
       const seenBatchUtrs = new Set<string>();
       const queueToSubmit: TransactionCandidate[] = [];
       let skippedDuplicateCount = 0;
@@ -98,7 +105,7 @@ export class StatementTransactionPersistenceService {
         const utr = candidate.transactionReference?.trim();
 
         if (utr && existingUpiRefs.has(utr)) {
-          // Exists in backend database
+          // Exists in local database
           skippedDuplicateCount++;
           statementCandidateStore.updatePersistenceStatus(
             candidate.localId,
@@ -157,13 +164,13 @@ export class StatementTransactionPersistenceService {
 
           try {
             const requestPayload = this.mapCandidateToRequest(candidate);
-            const response = await createTransactionApi(requestPayload);
+            const response = await this.transactionRepo.createTransaction(requestPayload);
 
             if (!response || !response.id) {
-              throw new Error('Backend response did not contain a valid transaction ID.');
+              throw new Error('Transaction repository did not return a valid transaction ID.');
             }
 
-            // HTTP succeeded and transaction ID returned -> mark PERSISTED
+            // Succeeded and transaction ID returned -> mark PERSISTED
             successCount++;
             persistedLocalIds.push(candidate.localId);
             statementCandidateStore.updatePersistenceStatus(
@@ -199,6 +206,10 @@ export class StatementTransactionPersistenceService {
         await Promise.all(workers);
       }
 
+      if (successCount > 0) {
+        triggerAutoBackup({ reason: 'persist statement transactions batch' });
+      }
+
       return {
         totalRequested,
         successCount,
@@ -210,75 +221,6 @@ export class StatementTransactionPersistenceService {
     } finally {
       this.isPersisting = false;
     }
-  }
-
-  /**
-   * Preflight: Fetches existing transactions from backend across the candidate date window
-   * with mandatory pagination until the stream is exhausted.
-   */
-  private async fetchExistingBackendUpiRefs(
-    candidates: TransactionCandidate[]
-  ): Promise<Set<string>> {
-    const upiRefs = new Set<string>();
-
-    try {
-      // Find min and max timestamp
-      let minMs = Infinity;
-      let maxMs = -Infinity;
-
-      for (const c of candidates) {
-        if (c.timestamp) {
-          const ms = new Date(c.timestamp).getTime();
-          if (!isNaN(ms)) {
-            if (ms < minMs) minMs = ms;
-            if (ms > maxMs) maxMs = ms;
-          }
-        }
-      }
-
-      const now = Date.now();
-      const marginMs = 48 * 60 * 60 * 1000; // 48h buffer
-      const startMs = isFinite(minMs) ? minMs - marginMs : now - 365 * 24 * 60 * 60 * 1000;
-      const endMs = isFinite(maxMs) ? maxMs + marginMs : now + marginMs;
-
-      const startDateStr = new Date(startMs).toISOString();
-      const endDateStr = new Date(endMs).toISOString();
-
-      let skip = 0;
-      const limit = 100;
-      let hasMore = true;
-
-      while (hasMore) {
-        const page = await getTransactionsApi({
-          start_date: startDateStr,
-          end_date: endDateStr,
-          skip,
-          limit,
-        });
-
-        if (!page || page.length === 0) {
-          hasMore = false;
-          break;
-        }
-
-        for (const tx of page) {
-          if (tx.upi_reference_id) {
-            upiRefs.add(tx.upi_reference_id.trim());
-          }
-        }
-
-        if (page.length < limit) {
-          hasMore = false;
-        } else {
-          skip += limit;
-        }
-      }
-    } catch (err) {
-      // If network or server error during preflight, log warning and proceed with local deduplication
-      console.warn('[StatementPersistence] Preflight check error, proceeding with local deduplication:', err);
-    }
-
-    return upiRefs;
   }
 
   /**

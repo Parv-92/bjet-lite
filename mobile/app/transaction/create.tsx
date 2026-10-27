@@ -17,7 +17,7 @@ import { useRouter } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ArrowLeft, ChevronDown, Tag, ChevronRight } from 'lucide-react-native';
+import { ArrowLeft, ChevronDown, Tag, ChevronRight, Check } from 'lucide-react-native';
 import { ScreenContainer } from '../../src/components/common/ScreenContainer';
 import { Input } from '../../src/components/ui/Input';
 import { Button } from '../../src/components/ui/Button';
@@ -30,20 +30,38 @@ import { colors } from '../../src/theme/colors';
 import { spacing } from '../../src/theme/spacing';
 import { fontSizes, fontWeights } from '../../src/theme/typography';
 
-const createTransactionSchema = z.object({
-  amount: z
-    .string()
-    .min(1, 'Amount is required')
-    .refine((val) => !isNaN(parseFloat(val)) && parseFloat(val) > 0, {
-      message: 'Amount must be greater than 0',
-    }),
-  merchant_raw_name: z.string().optional(),
-  category_id: z.number().nullable().optional(),
-  notes: z.string().optional(),
-  upi_reference_id: z.string().optional(),
-  upi_vpa: z.string().optional(),
-  payment_app: z.string().optional(),
-});
+const createTransactionSchema = z
+  .object({
+    amount: z
+      .string()
+      .min(1, 'Amount is required')
+      .refine((val) => !isNaN(parseFloat(val)) && parseFloat(val) > 0, {
+        message: 'Amount must be greater than 0',
+      }),
+    merchant_raw_name: z.string().optional(),
+    category_id: z.number().nullable().optional(),
+    notes: z.string().optional(),
+    set_as_merchant_default: z.boolean().optional(),
+    paid_for_someone_else: z.boolean().optional(),
+    amount_paid_for_someone_else: z.string().optional(),
+    upi_reference_id: z.string().optional(),
+    upi_vpa: z.string().optional(),
+    payment_app: z.string().optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.paid_for_someone_else && data.amount_paid_for_someone_else) {
+        const split = parseFloat(data.amount_paid_for_someone_else);
+        const total = parseFloat(data.amount || '0');
+        return !isNaN(split) && split >= 0 && split <= total;
+      }
+      return true;
+    },
+    {
+      message: 'Amount paid for others cannot exceed total transaction amount',
+      path: ['amount_paid_for_someone_else'],
+    }
+  );
 
 type CreateTransactionFormData = z.infer<typeof createTransactionSchema>;
 
@@ -69,6 +87,9 @@ export default function CreateTransactionScreen() {
       merchant_raw_name: '',
       category_id: null,
       notes: '',
+      set_as_merchant_default: false,
+      paid_for_someone_else: false,
+      amount_paid_for_someone_else: '',
       upi_reference_id: '',
       upi_vpa: '',
       payment_app: '',
@@ -77,15 +98,25 @@ export default function CreateTransactionScreen() {
 
   const selectedCategoryId = watch('category_id');
   const selectedCategory = categories?.find((c) => c.id === selectedCategoryId);
+  const watchedMerchant = watch('merchant_raw_name');
+  const merchantName = (watchedMerchant || '').trim();
 
   const onSubmit = async (values: CreateTransactionFormData) => {
     setApiError(null);
     try {
+      const paidForSomeoneElse = !!values.paid_for_someone_else;
+      const paidAmount =
+        paidForSomeoneElse && values.amount_paid_for_someone_else
+          ? parseFloat(values.amount_paid_for_someone_else)
+          : null;
+
       await createMutation.mutateAsync({
         amount: parseFloat(values.amount),
         merchant_raw_name: values.merchant_raw_name?.trim() || null,
         category_id: values.category_id || null,
         notes: values.notes?.trim() || null,
+        set_as_merchant_default: !!values.set_as_merchant_default,
+        amount_paid_for_someone_else: paidAmount,
         upi_reference_id: values.upi_reference_id?.trim() || null,
         upi_vpa: values.upi_vpa?.trim() || null,
         payment_app: values.payment_app?.trim() || null,
@@ -184,6 +215,82 @@ export default function CreateTransactionScreen() {
             </View>
             <ChevronRight color={colors.textMuted} size={18} />
           </TouchableOpacity>
+        </View>
+
+        {/* Optional Merchant Default Action */}
+        {merchantName.length > 0 && selectedCategoryId !== null && (
+          <Controller
+            control={control}
+            name="set_as_merchant_default"
+            render={({ field: { value, onChange } }) => (
+              <TouchableOpacity
+                style={styles.defaultCheckboxRow}
+                onPress={() => onChange(!value)}
+                activeOpacity={0.7}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: !!value }}
+                accessibilityLabel={`Make ${selectedCategory?.name || 'this category'} the default for ${merchantName}`}
+              >
+                <View style={[styles.checkbox, value && styles.checkboxActive]}>
+                  {value && <Check color={colors.background} size={14} strokeWidth={3} />}
+                </View>
+                <Text style={styles.defaultCheckboxText}>
+                  Make this the default category for{' '}
+                  <Text style={styles.merchantHighlight}>{merchantName}</Text>
+                </Text>
+              </TouchableOpacity>
+            )}
+          />
+        )}
+
+        {/* Paid for someone else */}
+        <View style={styles.adjustmentSection}>
+          <Controller
+            control={control}
+            name="paid_for_someone_else"
+            render={({ field: { value, onChange } }) => (
+              <TouchableOpacity
+                style={styles.defaultCheckboxRow}
+                onPress={() => {
+                  const next = !value;
+                  onChange(next);
+                  if (!next) {
+                    setValue('amount_paid_for_someone_else', '');
+                  }
+                }}
+                activeOpacity={0.7}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: !!value }}
+              >
+                <View style={[styles.checkbox, value && styles.checkboxActive]}>
+                  {value && <Check color={colors.background} size={14} strokeWidth={3} />}
+                </View>
+                <Text style={styles.defaultCheckboxText}>
+                  I paid part of this for someone else
+                </Text>
+              </TouchableOpacity>
+            )}
+          />
+
+          {watch('paid_for_someone_else') && (
+            <View style={styles.splitInputContainer}>
+              <Controller
+                control={control}
+                name="amount_paid_for_someone_else"
+                render={({ field: { onChange, onBlur, value } }) => (
+                  <Input
+                    label="Amount Paid for Others (₹)"
+                    placeholder="e.g. 300"
+                    keyboardType="numeric"
+                    value={value}
+                    onChangeText={onChange}
+                    onBlur={onBlur}
+                    error={errors.amount_paid_for_someone_else?.message}
+                  />
+                )}
+              />
+            </View>
+          )}
         </View>
 
         {/* Notes */}
@@ -379,5 +486,42 @@ const styles = StyleSheet.create({
   submitButton: {
     marginTop: spacing.md,
     marginBottom: spacing.xxl,
+  },
+  defaultCheckboxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceElevated,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.sm,
+  },
+  checkboxActive: {
+    backgroundColor: colors.brand,
+    borderColor: colors.brand,
+  },
+  defaultCheckboxText: {
+    color: colors.textSecondary,
+    fontSize: fontSizes.sm,
+    flex: 1,
+  },
+  merchantHighlight: {
+    color: colors.brandLight,
+    fontWeight: fontWeights.semibold,
+  },
+  adjustmentSection: {
+    marginBottom: spacing.md,
+  },
+  splitInputContainer: {
+    marginTop: spacing.xs,
+    paddingLeft: spacing.md,
   },
 });

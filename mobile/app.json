@@ -1,31 +1,21 @@
 {
   "expo": {
-    "name": "Bjet",
-    "slug": "bjet",
-    "scheme": "bjet",
+    "name": "Bjet Lite",
+    "slug": "bjet-lite",
+    "scheme": "bjet-lite",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "plugins": [
-      "expo-router",
-      [
-        "expo-camera",
-        {
-          "cameraPermission": "Allow Bjet to access the camera to scan receipts.",
-          "recordAudioAndroid": false,
-          "barcodeScannerEnabled": false
-        }
-      ]
+      "expo-router"
     ],
     "ios": {
       "supportsTablet": true
     },
     "android": {
-      "package": "com.bjet.mobile",
-      "permissions": [
-        "android.permission.CAMERA"
-      ],
+      "package": "com.bjet.lite",
+      "permissions": [],
       "blockedPermissions": [
         "android.permission.RECORD_AUDIO"
       ],

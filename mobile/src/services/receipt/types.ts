@@ -7,7 +7,7 @@
  * transaction records. No transaction parsing or creation occurs here.
  */
 
-import { ReceiptFile } from '../../types/receipt';
+import type { ReceiptFile } from '../../types/receipt';
 
 export type ExtractionMethod = 'OCR' | 'PDF_TEXT' | 'PDF_OCR';
 

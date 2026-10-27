@@ -20,6 +20,8 @@ import {
   CheckSquare,
   Trash2,
   X,
+  ArrowDownLeft,
+  ArrowUpRight,
 } from 'lucide-react-native';
 import { ScreenContainer } from '../../src/components/common/ScreenContainer';
 import { TransactionCard } from '../../src/components/transactions/TransactionCard';
@@ -36,7 +38,7 @@ import { fontSizes, fontWeights } from '../../src/theme/typography';
 // [DIAGNOSTIC INSTRUMENTATION - TEMPORARY]
 import { useRenderDiagnostic } from '../../src/utils/perfDiagnostic';
 
-type FilterTab = 'ALL' | 'CONFIRMED' | 'PENDING_CONFIRMATION' | 'MANUAL';
+type FilterTab = 'ALL' | 'MANUAL';
 
 interface FilterOption {
   key: FilterTab;
@@ -46,8 +48,6 @@ interface FilterOption {
 
 const FILTER_OPTIONS: FilterOption[] = [
   { key: 'ALL', label: 'All' },
-  { key: 'CONFIRMED', label: 'Confirmed', status: 'CONFIRMED' },
-  { key: 'PENDING_CONFIRMATION', label: 'Pending Review', status: 'PENDING_CONFIRMATION' },
   { key: 'MANUAL', label: 'Manual', status: 'MANUAL' },
 ];
 
@@ -59,6 +59,7 @@ const MONTH_NAMES = [
 interface TransactionSection {
   title: string;
   key: string;
+  netMovement: number;
   data: TransactionListItemResponse[];
 }
 
@@ -99,7 +100,7 @@ export default function TransactionsScreen() {
       const title = `${monthName} ${year}`;
 
       if (!groupMap.has(groupKey)) {
-        groupMap.set(groupKey, { title, key: groupKey, data: [] });
+        groupMap.set(groupKey, { title, key: groupKey, netMovement: 0, data: [] });
       }
       groupMap.get(groupKey)!.data.push(tx);
     }
@@ -107,13 +108,26 @@ export default function TransactionsScreen() {
     // Sort months descending (newest first)
     const sortedSections = Array.from(groupMap.values()).sort((a, b) => b.key.localeCompare(a.key));
 
-    // Sort items within each month descending by date
+    // Sort items within each month descending by date and compute authoritative monthly net movement
     for (const sec of sortedSections) {
       sec.data.sort((a, b) => {
         const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
         const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
         return timeB - timeA;
       });
+
+      let outgoing = 0;
+      let incoming = 0;
+      for (const tx of sec.data) {
+        if (tx.direction === 'RECEIVED' && tx.is_reimbursement) {
+          incoming += parseFloat(tx.amount || '0') || 0;
+        } else if (tx.direction === 'SENT') {
+          const paidForOthers = parseFloat(tx.amount_paid_for_someone_else || '0') || 0;
+          const total = parseFloat(tx.amount || '0') || 0;
+          outgoing += Math.max(0, total - paidForOthers);
+        }
+      }
+      sec.netMovement = Math.round((incoming - outgoing) * 100) / 100;
     }
 
     return sortedSections;
@@ -300,14 +314,60 @@ export default function TransactionsScreen() {
                 onToggleSelect={handleToggleSelect}
               />
             )}
-            renderSectionHeader={({ section: { title, data } }) => (
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>{title}</Text>
-                <View style={styles.sectionBadge}>
-                  <Text style={styles.sectionBadgeText}>{data.length}</Text>
+            renderSectionHeader={({ section }) => {
+              const isNetNegative = section.netMovement < 0;
+              const isNetPositive = section.netMovement > 0;
+              const absMovement = Math.abs(section.netMovement);
+              const formattedMovement = `₹${absMovement.toLocaleString('en-IN', {
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 0,
+              })}`;
+
+              return (
+                <View style={styles.sectionHeader}>
+                  <View style={styles.sectionLeft}>
+                    <Text style={styles.sectionTitle}>{section.title}</Text>
+                    <View style={styles.sectionBadge}>
+                      <Text style={styles.sectionBadgeText}>{section.data.length}</Text>
+                    </View>
+                  </View>
+
+                  {/* Monthly Net Movement Badge with explicit +/- and direction icon */}
+                  <View
+                    style={[
+                      styles.movementBadge,
+                      isNetNegative
+                        ? styles.movementBadgeNegative
+                        : isNetPositive
+                        ? styles.movementBadgePositive
+                        : styles.movementBadgeNeutral,
+                    ]}
+                  >
+                    {isNetNegative ? (
+                      <ArrowUpRight size={12} color={colors.danger} />
+                    ) : isNetPositive ? (
+                      <ArrowDownLeft size={12} color={colors.success} />
+                    ) : null}
+                    <Text
+                      style={[
+                        styles.movementText,
+                        isNetNegative
+                          ? styles.movementTextNegative
+                          : isNetPositive
+                          ? styles.movementTextPositive
+                          : styles.movementTextNeutral,
+                      ]}
+                    >
+                      {isNetNegative
+                        ? `−${formattedMovement}`
+                        : isNetPositive
+                        ? `+${formattedMovement}`
+                        : '₹0'}
+                    </Text>
+                  </View>
                 </View>
-              </View>
-            )}
+              );
+            }}
             stickySectionHeadersEnabled={false}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={[
@@ -504,6 +564,11 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     marginBottom: spacing.xs,
   },
+  sectionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
   sectionTitle: {
     color: colors.textSecondary,
     fontSize: fontSizes.xs,
@@ -518,6 +583,40 @@ const styles = StyleSheet.create({
     borderRadius: radii.full,
     borderWidth: 1,
     borderColor: colors.borderMuted,
+  },
+  movementBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    borderRadius: radii.xs,
+    borderWidth: 1,
+  },
+  movementBadgeNegative: {
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+  },
+  movementBadgePositive: {
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+  },
+  movementBadgeNeutral: {
+    backgroundColor: colors.surfaceElevated,
+    borderColor: colors.borderMuted,
+  },
+  movementText: {
+    fontSize: 11,
+    fontWeight: fontWeights.bold,
+  },
+  movementTextNegative: {
+    color: colors.danger,
+  },
+  movementTextPositive: {
+    color: colors.brandLight,
+  },
+  movementTextNeutral: {
+    color: colors.textMuted,
   },
   sectionBadgeText: {
     color: colors.textMuted,
