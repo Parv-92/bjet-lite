@@ -9,9 +9,10 @@
  * - Built using react-native-svg for crisp, hardware-accelerated donut visualization.
  */
 import React from 'react';
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { useRouter } from 'expo-router';
 import Svg, { Circle, G } from 'react-native-svg';
-import { PieChart } from 'lucide-react-native';
+import { PieChart, ChevronRight } from 'lucide-react-native';
 import { Card } from '../ui/Card';
 import { useMonthlySpendingBreakdown } from '../../hooks/useBudgets';
 import { colors } from '../../theme/colors';
@@ -29,7 +30,25 @@ const MONTH_NAMES = [
 ];
 
 export const SpendingPieChartCard: React.FC<SpendingPieChartCardProps> = ({ month, year }) => {
+  const router = useRouter();
   const { data: breakdown, isLoading, isError } = useMonthlySpendingBreakdown(month, year);
+
+  const handleCategoryPress = (item: {
+    category_id: number | null;
+    category_name: string;
+    color: string;
+  }) => {
+    router.push({
+      pathname: '/category-transactions' as any,
+      params: {
+        categoryId: item.category_id !== null ? String(item.category_id) : 'uncategorized',
+        categoryName: item.category_name,
+        categoryColor: item.color,
+        month: String(month),
+        year: String(year),
+      },
+    });
+  };
 
   const formatCurrency = (val: number | string) => {
     const num = typeof val === 'number' ? val : parseFloat(val) || 0;
@@ -180,7 +199,14 @@ export const SpendingPieChartCard: React.FC<SpendingPieChartCardProps> = ({ mont
           {/* Category Legend & Breakdown List */}
           <View style={styles.legendList}>
             {slices.map((item, index) => (
-              <View key={`legend-${item.category_id ?? 'uncat'}-${index}`} style={styles.legendItem}>
+              <TouchableOpacity
+                key={`legend-${item.category_id ?? 'uncat'}-${index}`}
+                style={styles.legendItem}
+                onPress={() => handleCategoryPress(item)}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={`View ${item.category_name} transactions for ${monthLabel}`}
+              >
                 {/* Top Row: Color dot, Category Name, Amount, Percentage */}
                 <View style={styles.legendItemHeader}>
                   <View style={styles.legendLeft}>
@@ -197,6 +223,7 @@ export const SpendingPieChartCard: React.FC<SpendingPieChartCardProps> = ({ mont
                     <View style={styles.percentageBadge}>
                       <Text style={styles.percentageText}>{item.percentage}%</Text>
                     </View>
+                    <ChevronRight size={13} color={colors.textMuted} style={styles.chevron} />
                   </View>
                 </View>
 
@@ -212,7 +239,7 @@ export const SpendingPieChartCard: React.FC<SpendingPieChartCardProps> = ({ mont
                     ]}
                   />
                 </View>
-              </View>
+              </TouchableOpacity>
             ))}
           </View>
         </View>
@@ -373,6 +400,9 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: fontWeights.semibold,
     color: colors.textSecondary,
+  },
+  chevron: {
+    marginLeft: 4,
   },
   progressBarTrack: {
     height: 4,

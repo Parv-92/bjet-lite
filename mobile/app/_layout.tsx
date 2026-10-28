@@ -82,6 +82,8 @@ export default function RootLayout() {
               <Stack.Screen name="rule/edit/[id]" />
               <Stack.Screen name="friends" />
               <Stack.Screen name="budget-presets" />
+              <Stack.Screen name="category-transactions" />
+              <Stack.Screen name="category-filter" />
             </Stack>
             <FirstLaunchOnboardingModal />
           </RouteGuard>

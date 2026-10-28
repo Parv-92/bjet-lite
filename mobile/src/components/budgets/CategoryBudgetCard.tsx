@@ -6,7 +6,7 @@
  */
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { Edit3, AlertCircle } from 'lucide-react-native';
+import { Edit3, AlertCircle, ChevronRight } from 'lucide-react-native';
 import { Card } from '../ui/Card';
 import { BudgetSummary } from '../../types/api';
 import { colors } from '../../theme/colors';
@@ -16,11 +16,13 @@ import { fontSizes, fontWeights } from '../../theme/typography';
 interface CategoryBudgetCardProps {
   item: BudgetSummary;
   onEdit: (item: BudgetSummary) => void;
+  onPress?: (item: BudgetSummary) => void;
 }
 
 export const CategoryBudgetCard: React.FC<CategoryBudgetCardProps> = ({
   item,
   onEdit,
+  onPress,
 }) => {
   const categoryName = item.category?.name || `Category #${item.category_id}`;
   const categoryColor = item.category?.color || colors.brand;
@@ -47,83 +49,95 @@ export const CategoryBudgetCard: React.FC<CategoryBudgetCardProps> = ({
   };
 
   return (
-    <Card
-      style={StyleSheet.flatten([
-        styles.card,
-        isOverBudget && styles.cardOverBudget,
-      ])}
+    <TouchableOpacity
+      activeOpacity={onPress ? 0.75 : 1}
+      onPress={() => onPress?.(item)}
+      disabled={!onPress}
+      accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityLabel={`View ${categoryName} transactions`}
     >
-      {/* Top Header: Category name/color and Edit button */}
-      <View style={styles.topRow}>
-        <View style={styles.categoryInfo}>
-          <View style={[styles.colorIndicator, { backgroundColor: categoryColor }]} />
-          <Text style={styles.categoryName} numberOfLines={1}>
-            {categoryName}
+      <Card
+        style={StyleSheet.flatten([
+          styles.card,
+          isOverBudget && styles.cardOverBudget,
+        ])}
+      >
+        {/* Top Header: Category name/color and Edit button */}
+        <View style={styles.topRow}>
+          <View style={styles.categoryInfo}>
+            <View style={[styles.colorIndicator, { backgroundColor: categoryColor }]} />
+            <Text style={styles.categoryName} numberOfLines={1}>
+              {categoryName}
+            </Text>
+            {onPress && <ChevronRight size={14} color={colors.textMuted} style={styles.categoryChevron} />}
+          </View>
+
+          <TouchableOpacity
+            style={styles.editButton}
+            onPress={(e) => {
+              e.stopPropagation();
+              onEdit(item);
+            }}
+            accessibilityLabel={`Edit ${categoryName} budget`}
+            activeOpacity={0.7}
+          >
+            <Edit3 color={colors.textSecondary} size={15} />
+            <Text style={styles.editText}>Edit</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Main Amounts Row */}
+        <View style={styles.amountsRow}>
+          <View style={styles.spentLimitRow}>
+            <Text style={[styles.spentText, isOverBudget && styles.textDanger]}>
+              {formatCurrency(spent)}
+            </Text>
+            <Text style={styles.limitText}> / {formatCurrency(limit)}</Text>
+          </View>
+          <Text style={[styles.percentageText, { color: getProgressColor() }]}>
+            {percentage.toFixed(1)}%
           </Text>
         </View>
 
-        <TouchableOpacity
-          style={styles.editButton}
-          onPress={() => onEdit(item)}
-          accessibilityLabel={`Edit ${categoryName} budget`}
-          activeOpacity={0.7}
-        >
-          <Edit3 color={colors.textSecondary} size={15} />
-          <Text style={styles.editText}>Edit</Text>
-        </TouchableOpacity>
-      </View>
+        {/* Progress Bar */}
+        <View style={styles.progressBarBackground}>
+          <View
+            style={[
+              styles.progressBarFill,
+              {
+                width: `${clampedPercentage}%`,
+                backgroundColor: getProgressColor(),
+              },
+            ]}
+          />
+        </View>
 
-      {/* Main Amounts Row */}
-      <View style={styles.amountsRow}>
-        <View style={styles.spentLimitRow}>
-          <Text style={[styles.spentText, isOverBudget && styles.textDanger]}>
-            {formatCurrency(spent)}
+        {/* Footer: Remaining / Over-budget label */}
+        <View style={styles.footerRow}>
+          <Text style={styles.remainingLabel}>
+            {isOverBudget ? 'Over Budget' : 'Remaining'}
           </Text>
-          <Text style={styles.limitText}> / {formatCurrency(limit)}</Text>
+          <Text
+            style={[
+              styles.remainingValue,
+              isOverBudget ? styles.textDanger : styles.textSuccess,
+            ]}
+          >
+            {isOverBudget
+              ? `-${formatCurrency(Math.abs(remaining))}`
+              : formatCurrency(remaining)}
+          </Text>
         </View>
-        <Text style={[styles.percentageText, { color: getProgressColor() }]}>
-          {percentage.toFixed(1)}%
-        </Text>
-      </View>
 
-      {/* Progress Bar */}
-      <View style={styles.progressBarBackground}>
-        <View
-          style={[
-            styles.progressBarFill,
-            {
-              width: `${clampedPercentage}%`,
-              backgroundColor: getProgressColor(),
-            },
-          ]}
-        />
-      </View>
-
-      {/* Footer: Remaining / Over-budget label */}
-      <View style={styles.footerRow}>
-        <Text style={styles.remainingLabel}>
-          {isOverBudget ? 'Over Budget' : 'Remaining'}
-        </Text>
-        <Text
-          style={[
-            styles.remainingValue,
-            isOverBudget ? styles.textDanger : styles.textSuccess,
-          ]}
-        >
-          {isOverBudget
-            ? `-${formatCurrency(Math.abs(remaining))}`
-            : formatCurrency(remaining)}
-        </Text>
-      </View>
-
-      {/* Over-budget tag */}
-      {isOverBudget && (
-        <View style={styles.overBudgetTag}>
-          <AlertCircle color={colors.danger} size={12} />
-          <Text style={styles.overBudgetTagText}>Limit exceeded for this category</Text>
-        </View>
-      )}
-    </Card>
+        {/* Over-budget tag */}
+        {isOverBudget && (
+          <View style={styles.overBudgetTag}>
+            <AlertCircle color={colors.danger} size={12} />
+            <Text style={styles.overBudgetTagText}>Limit exceeded for this category</Text>
+          </View>
+        )}
+      </Card>
+    </TouchableOpacity>
   );
 };
 
@@ -160,6 +174,9 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: fontSizes.base,
     fontWeight: fontWeights.semibold,
+  },
+  categoryChevron: {
+    marginLeft: 4,
   },
   editButton: {
     flexDirection: 'row',

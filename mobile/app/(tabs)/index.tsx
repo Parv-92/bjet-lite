@@ -333,6 +333,18 @@ export default function OverviewScreen() {
               key={`cat-budget-${item.id}`}
               item={item}
               onEdit={handleEditBudget}
+              onPress={() => {
+                router.push({
+                  pathname: '/category-transactions' as any,
+                  params: {
+                    categoryId: String(item.category_id),
+                    categoryName: item.category?.name || `Category #${item.category_id}`,
+                    categoryColor: item.category?.color || colors.brand,
+                    month: String(selectedMonth),
+                    year: String(selectedYear),
+                  },
+                });
+              }}
             />
           ))
         )}

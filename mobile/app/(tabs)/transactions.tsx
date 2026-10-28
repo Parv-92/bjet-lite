@@ -3,7 +3,7 @@
  * Main transactions list with monthly grouping (SectionList),
  * selection mode, atomic bulk deletion, and status filter chips.
  */
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import {
   RefreshControl,
   Alert,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import {
   Plus,
   ReceiptText,
@@ -23,12 +23,16 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   Settings as SettingsIcon,
+  ChevronDown,
+  ChevronUp,
+  Filter,
 } from 'lucide-react-native';
 import { ScreenContainer } from '../../src/components/common/ScreenContainer';
 import { TransactionCard } from '../../src/components/transactions/TransactionCard';
 import { LoadingSpinner } from '../../src/components/ui/LoadingSpinner';
 import { EmptyState } from '../../src/components/common/EmptyState';
-import { useTransactions } from '../../src/hooks/useTransactions';
+import { useTransactions, GetTransactionsParams } from '../../src/hooks/useTransactions';
+import { useCategories } from '../../src/hooks/useCategories';
 import { useBulkDeleteTransactions } from '../../src/hooks/useTransactionMutations';
 import { useAuth } from '../../src/hooks/useAuth';
 import { getApiErrorMessage } from '../../src/api/client';
@@ -61,15 +65,64 @@ interface TransactionSection {
   title: string;
   key: string;
   netMovement: number;
+  totalCount: number;
   data: TransactionListItemResponse[];
 }
 
 export default function TransactionsScreen() {
   const router = useRouter();
+  const localParams = useLocalSearchParams<{
+    categoryFilter?: string;
+    categoryName?: string;
+  }>();
   const { isAuthenticated } = useAuth();
+  const { data: allCategories } = useCategories();
+
   const [selectedFilter, setSelectedFilter] = useState<FilterTab>('ALL');
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+
+  // Category filter state (Feature 2)
+  const [categoryFilter, setCategoryFilter] = useState<{ id: string; name: string } | null>(null);
+
+  // Sync category filter from route params when returning from /category-filter
+  useEffect(() => {
+    if (localParams.categoryFilter !== undefined) {
+      if (localParams.categoryFilter === 'all' || !localParams.categoryFilter) {
+        setCategoryFilter(null);
+      } else {
+        setCategoryFilter({
+          id: localParams.categoryFilter,
+          name:
+            localParams.categoryName ||
+            (localParams.categoryFilter === 'uncategorized'
+              ? 'Uncategorized'
+              : 'Category'),
+        });
+      }
+    }
+  }, [localParams.categoryFilter, localParams.categoryName]);
+
+  const activeCategoryColor = useMemo(() => {
+    if (!categoryFilter) return null;
+    if (categoryFilter.id === 'uncategorized') return '#9E9E9E';
+    const cat = allCategories?.find((c) => String(c.id) === categoryFilter.id);
+    return cat?.color || colors.brand;
+  }, [categoryFilter, allCategories]);
+
+  const handleClearCategoryFilter = () => {
+    setCategoryFilter(null);
+    router.setParams({ categoryFilter: undefined, categoryName: undefined });
+  };
+
+  const handleOpenCategoryFilter = () => {
+    router.push({
+      pathname: '/category-filter' as any,
+      params: {
+        selectedCategoryFilter: categoryFilter ? categoryFilter.id : 'all',
+      },
+    });
+  };
 
   const bulkDeleteMutation = useBulkDeleteTransactions();
 
@@ -78,19 +131,51 @@ export default function TransactionsScreen() {
     return opt?.status;
   }, [selectedFilter]);
 
+  // Query parameters with both status and category filtering
+  const queryParams = useMemo<GetTransactionsParams | undefined>(() => {
+    const p: GetTransactionsParams = {};
+    if (activeStatus) {
+      p.status = activeStatus;
+    }
+    if (categoryFilter) {
+      if (categoryFilter.id === 'uncategorized') {
+        p.uncategorized = true;
+      } else {
+        p.category_id = parseInt(categoryFilter.id, 10);
+      }
+    }
+    return Object.keys(p).length > 0 ? p : undefined;
+  }, [activeStatus, categoryFilter]);
+
   const {
     data: transactions,
     isLoading,
     isRefetching,
     refetch,
     error,
-  } = useTransactions(activeStatus ? { status: activeStatus } : undefined);
+  } = useTransactions(queryParams);
+
+  // Collapsible monthly groups (Feature 3):
+  // All monthly groups must be collapsed by default whenever screen is opened fresh!
+  const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
+
+  const toggleMonth = (key: string) => {
+    setExpandedMonths((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
 
   // Group transactions by Month + Year
   const sections = useMemo<TransactionSection[]>(() => {
     if (!transactions || transactions.length === 0) return [];
 
-    const groupMap = new Map<string, TransactionSection>();
+    const groupMap = new Map<string, { title: string; key: string; netMovement: number; data: TransactionListItemResponse[] }>();
 
     for (const tx of transactions) {
       const date = tx.timestamp ? new Date(tx.timestamp) : new Date();
@@ -131,8 +216,13 @@ export default function TransactionsScreen() {
       sec.netMovement = Math.round((incoming - outgoing) * 100) / 100;
     }
 
-    return sortedSections;
-  }, [transactions]);
+    // Pass data: [] for collapsed months to keep virtualization and rendering fast
+    return sortedSections.map((sec) => ({
+      ...sec,
+      totalCount: sec.data.length,
+      data: expandedMonths.has(sec.key) ? sec.data : [],
+    }));
+  }, [transactions, expandedMonths]);
 
   // [DIAGNOSTIC INSTRUMENTATION - TEMPORARY]
   useRenderDiagnostic('TransactionsScreen', {
@@ -274,28 +364,75 @@ export default function TransactionsScreen() {
         </View>
       )}
 
-      {/* Filter Chips - Read-only list filters */}
+      {/* Filter Row: Status Chips + Category Filter */}
       <View style={styles.filterRow}>
-        {FILTER_OPTIONS.map((filter) => {
-          const isActive = selectedFilter === filter.key;
-          return (
-            <TouchableOpacity
-              key={filter.key}
-              style={[styles.filterChip, isActive && styles.filterChipActive]}
-              onPress={() => setSelectedFilter(filter.key)}
-              activeOpacity={0.7}
-            >
-              <Text
-                style={[
-                  styles.filterChipText,
-                  isActive && styles.filterChipTextActive,
-                ]}
+        <View style={styles.statusChipsContainer}>
+          {FILTER_OPTIONS.map((filter) => {
+            const isActive = selectedFilter === filter.key;
+            return (
+              <TouchableOpacity
+                key={filter.key}
+                style={[styles.filterChip, isActive && styles.filterChipActive]}
+                onPress={() => setSelectedFilter(filter.key)}
+                activeOpacity={0.7}
               >
-                {filter.label}
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    isActive && styles.filterChipTextActive,
+                  ]}
+                >
+                  {filter.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {/* Category Filter Button / Active Filter Pill */}
+        {!categoryFilter ? (
+          <TouchableOpacity
+            style={styles.categoryFilterButton}
+            onPress={handleOpenCategoryFilter}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Filter by category"
+          >
+            <Filter size={12} color={colors.textSecondary} />
+            <Text style={styles.categoryFilterButtonText}>Category</Text>
+            <ChevronDown size={12} color={colors.textMuted} />
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.activeCategoryPill}>
+            <TouchableOpacity
+              style={styles.activeCategoryPillTouch}
+              onPress={handleOpenCategoryFilter}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={`Category filter: ${categoryFilter.name}`}
+            >
+              <View
+                style={[
+                  styles.activeCategoryDot,
+                  { backgroundColor: activeCategoryColor || colors.brand },
+                ]}
+              />
+              <Text style={styles.activeCategoryPillText} numberOfLines={1}>
+                {categoryFilter.name}
               </Text>
             </TouchableOpacity>
-          );
-        })}
+
+            <TouchableOpacity
+              style={styles.clearCategoryButton}
+              onPress={handleClearCategoryFilter}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityRole="button"
+              accessibilityLabel="Clear category filter"
+            >
+              <X size={12} color={colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       {/* Transaction List / Loading / Empty State */}
@@ -325,6 +462,7 @@ export default function TransactionsScreen() {
               />
             )}
             renderSectionHeader={({ section }) => {
+              const isExpanded = expandedMonths.has(section.key);
               const isNetNegative = section.netMovement < 0;
               const isNetPositive = section.netMovement > 0;
               const absMovement = Math.abs(section.netMovement);
@@ -334,48 +472,67 @@ export default function TransactionsScreen() {
               })}`;
 
               return (
-                <View style={styles.sectionHeader}>
+                <TouchableOpacity
+                  style={styles.sectionHeader}
+                  onPress={() => toggleMonth(section.key)}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${section.title}, ${section.totalCount} transactions, ${
+                    isExpanded ? 'expanded' : 'collapsed'
+                  }`}
+                >
                   <View style={styles.sectionLeft}>
                     <Text style={styles.sectionTitle}>{section.title}</Text>
                     <View style={styles.sectionBadge}>
-                      <Text style={styles.sectionBadgeText}>{section.data.length}</Text>
+                      <Text style={styles.sectionBadgeText}>{section.totalCount}</Text>
                     </View>
                   </View>
 
-                  {/* Monthly Net Movement Badge with explicit +/- and direction icon */}
-                  <View
-                    style={[
-                      styles.movementBadge,
-                      isNetNegative
-                        ? styles.movementBadgeNegative
-                        : isNetPositive
-                        ? styles.movementBadgePositive
-                        : styles.movementBadgeNeutral,
-                    ]}
-                  >
-                    {isNetNegative ? (
-                      <ArrowUpRight size={12} color={colors.danger} />
-                    ) : isNetPositive ? (
-                      <ArrowDownLeft size={12} color={colors.success} />
-                    ) : null}
-                    <Text
+                  <View style={styles.sectionRight}>
+                    {/* Monthly Net Movement Badge with explicit +/- and direction icon */}
+                    <View
                       style={[
-                        styles.movementText,
+                        styles.movementBadge,
                         isNetNegative
-                          ? styles.movementTextNegative
+                          ? styles.movementBadgeNegative
                           : isNetPositive
-                          ? styles.movementTextPositive
-                          : styles.movementTextNeutral,
+                          ? styles.movementBadgePositive
+                          : styles.movementBadgeNeutral,
                       ]}
                     >
-                      {isNetNegative
-                        ? `−${formattedMovement}`
-                        : isNetPositive
-                        ? `+${formattedMovement}`
-                        : '₹0'}
-                    </Text>
+                      {isNetNegative ? (
+                        <ArrowUpRight size={12} color={colors.danger} />
+                      ) : isNetPositive ? (
+                        <ArrowDownLeft size={12} color={colors.success} />
+                      ) : null}
+                      <Text
+                        style={[
+                          styles.movementText,
+                          isNetNegative
+                            ? styles.movementTextNegative
+                            : isNetPositive
+                            ? styles.movementTextPositive
+                            : styles.movementTextNeutral,
+                        ]}
+                      >
+                        {isNetNegative
+                          ? `−${formattedMovement}`
+                          : isNetPositive
+                          ? `+${formattedMovement}`
+                          : '₹0'}
+                      </Text>
+                    </View>
+
+                    {/* Collapsible Dropdown Arrow */}
+                    <View style={styles.sectionChevronBox}>
+                      {isExpanded ? (
+                        <ChevronUp size={15} color={colors.textSecondary} />
+                      ) : (
+                        <ChevronDown size={15} color={colors.textSecondary} />
+                      )}
+                    </View>
                   </View>
-                </View>
+                </TouchableOpacity>
               );
             }}
             stickySectionHeadersEnabled={false}
@@ -396,17 +553,33 @@ export default function TransactionsScreen() {
               <EmptyState
                 icon={<ReceiptText color={colors.textMuted} size={48} />}
                 title={
-                  selectedFilter === 'ALL'
+                  categoryFilter
+                    ? 'No Matching Transactions'
+                    : selectedFilter === 'ALL'
                     ? 'No Transactions Yet'
                     : `No ${FILTER_OPTIONS.find((f) => f.key === selectedFilter)?.label} Transactions`
                 }
                 description={
-                  selectedFilter === 'ALL'
+                  categoryFilter
+                    ? `No transactions found for category "${categoryFilter.name}".`
+                    : selectedFilter === 'ALL'
                     ? 'Tap "+ Add" to record your first transaction.'
                     : `No transactions match the "${FILTER_OPTIONS.find((f) => f.key === selectedFilter)?.label}" filter.`
                 }
-                actionLabel={selectedFilter === 'ALL' ? 'Add Transaction' : undefined}
-                onAction={selectedFilter === 'ALL' ? handleAddPress : undefined}
+                actionLabel={
+                  categoryFilter
+                    ? 'Clear Category Filter'
+                    : selectedFilter === 'ALL'
+                    ? 'Add Transaction'
+                    : undefined
+                }
+                onAction={
+                  categoryFilter
+                    ? handleClearCategoryFilter
+                    : selectedFilter === 'ALL'
+                    ? handleAddPress
+                    : undefined
+                }
               />
             }
           />
@@ -543,8 +716,64 @@ const styles = StyleSheet.create({
   },
   filterRow: {
     flexDirection: 'row',
-    gap: spacing.xs,
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: spacing.md,
+  },
+  statusChipsContainer: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  categoryFilterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: 20,
+    backgroundColor: colors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  categoryFilterButtonText: {
+    color: colors.textSecondary,
+    fontSize: fontSizes.xs,
+    fontWeight: fontWeights.medium,
+  },
+  activeCategoryPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    borderWidth: 1,
+    borderColor: colors.brandLight,
+    borderRadius: 20,
+    paddingLeft: spacing.sm + 2,
+    paddingRight: 6,
+    paddingVertical: 3,
+    maxWidth: 160,
+  },
+  activeCategoryPillTouch: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    flexShrink: 1,
+  },
+  activeCategoryDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  activeCategoryPillText: {
+    color: colors.brandLight,
+    fontSize: fontSizes.xs,
+    fontWeight: fontWeights.bold,
+    flexShrink: 1,
+  },
+  clearCategoryButton: {
+    marginLeft: 4,
+    padding: 2,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   filterChip: {
     paddingHorizontal: spacing.md,
@@ -588,6 +817,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
+  },
+  sectionRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs + 2,
+  },
+  sectionChevronBox: {
+    width: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sectionTitle: {
     color: colors.textSecondary,

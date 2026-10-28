@@ -32,7 +32,8 @@ export interface GetTransactionsParams {
   limit?: number;
   skip?: number;
   status?: TransactionStatus;
-  category_id?: number;
+  category_id?: number | null;
+  uncategorized?: boolean;
   direction?: TransactionDirection;
   month?: number;
   year?: number;
@@ -171,7 +172,9 @@ export class SQLiteTransactionRepository implements ITransactionRepository {
       values.push(params.status);
     }
 
-    if (params?.category_id !== undefined) {
+    if (params?.uncategorized || params?.category_id === null) {
+      conditions.push(`(t.category_id IS NULL OR c.name COLLATE NOCASE = 'Uncategorized')`);
+    } else if (params?.category_id !== undefined) {
       conditions.push(`t.category_id = ?`);
       values.push(params.category_id);
     }
