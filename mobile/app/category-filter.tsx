@@ -355,7 +355,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   allIconBox: {
-    backgroundColor: 'rgba(52, 211, 153, 0.12)',
+    backgroundColor: 'rgba(20, 184, 166, 0.12)',
   },
   uncatIconBox: {
     backgroundColor: 'rgba(158, 158, 158, 0.15)',
@@ -380,9 +380,8 @@ const styles = StyleSheet.create({
   },
   sectionDividerText: {
     color: colors.textMuted,
-    fontSize: 10,
-    fontWeight: fontWeights.bold,
-    letterSpacing: 0.8,
+    fontSize: 11,
+    fontWeight: fontWeights.semibold,
   },
   categoryRow: {
     flexDirection: 'row',
@@ -398,7 +397,7 @@ const styles = StyleSheet.create({
   },
   categoryRowActive: {
     borderColor: colors.brand,
-    backgroundColor: 'rgba(16, 185, 129, 0.05)',
+    backgroundColor: 'rgba(20, 184, 166, 0.08)',
   },
   categoryLeft: {
     flexDirection: 'row',

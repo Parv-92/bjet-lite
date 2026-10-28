@@ -28,23 +28,23 @@ export const BudgetEmptyState: React.FC<BudgetEmptyStateProps> = ({
   return (
     <View style={styles.container}>
       <View style={styles.iconCircle}>
-        <PieChart color={colors.brandLight} size={40} />
+        <PieChart color={colors.brandLight} size={28} />
       </View>
 
       <Text style={styles.title}>
-        {noCategories ? 'No Categories Found' : `No Budgets for ${monthName} ${year}`}
+        {noCategories ? 'No categories found' : `No budgets for ${monthName} ${year}`}
       </Text>
 
       <Text style={styles.description}>
         {noCategories
-          ? 'Categories are required to create budgets. Please make sure categories are accessible.'
-          : `Set spending limits on your categories to track progress and prevent overspending in ${monthName}.`}
+          ? 'Categories are required to configure budgets.'
+          : `No budget limits set for ${monthName} ${year}.`}
       </Text>
 
       {!noCategories && (
         <Button
-          title="Add Category Budget"
-          icon={<Plus color={colors.background} size={18} />}
+          title="Add budget"
+          icon={<Plus color={colors.background} size={16} />}
           onPress={onAddBudget}
           variant="primary"
           style={styles.actionButton}
@@ -59,24 +59,24 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderColor: colors.border,
     borderWidth: 1,
-    borderRadius: radii.lg,
+    borderRadius: radii.md,
     padding: spacing.xl,
     alignItems: 'center',
     justifyContent: 'center',
     marginVertical: spacing.md,
   },
   iconCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: 'rgba(52, 211, 153, 0.12)',
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(20, 184, 166, 0.12)',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.md,
   },
   title: {
     color: colors.text,
-    fontSize: fontSizes.lg,
+    fontSize: fontSizes.base,
     fontWeight: fontWeights.bold,
     textAlign: 'center',
     marginBottom: spacing.xs,
@@ -90,6 +90,6 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   actionButton: {
-    minWidth: 200,
+    minWidth: 160,
   },
 });

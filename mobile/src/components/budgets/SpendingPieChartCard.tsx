@@ -106,7 +106,7 @@ export const SpendingPieChartCard: React.FC<SpendingPieChartCardProps> = ({ mont
           </View>
           <View>
             <Text style={styles.title}>Spending Breakdown</Text>
-            <Text style={styles.subtitle}>Where did money go this month</Text>
+            <Text style={styles.subtitle}>Expenses by category</Text>
           </View>
         </View>
         <View style={styles.monthPill}>
@@ -140,13 +140,13 @@ export const SpendingPieChartCard: React.FC<SpendingPieChartCardProps> = ({ mont
               />
             </Svg>
             <View style={styles.donutCenter}>
-              <Text style={styles.centerLabel}>TOTAL SPENT</Text>
+              <Text style={styles.centerLabel}>Total spent</Text>
               <Text style={styles.centerAmount}>₹0</Text>
             </View>
           </View>
           <Text style={styles.emptyTitle}>No spending recorded</Text>
           <Text style={styles.emptySubtitle}>
-            Transactions logged for {monthLabel} will appear here categorized with visual shares.
+            Transactions recorded for {monthLabel} will appear here categorized.
           </Text>
         </View>
       ) : (
@@ -186,7 +186,7 @@ export const SpendingPieChartCard: React.FC<SpendingPieChartCardProps> = ({ mont
 
             {/* Centered Total */}
             <View style={styles.donutCenter}>
-              <Text style={styles.centerLabel}>TOTAL SPENT</Text>
+              <Text style={styles.centerLabel}>Total spent</Text>
               <Text style={styles.centerAmount} numberOfLines={1} adjustsFontSizeToFit>
                 {formatCurrency(totalSpent)}
               </Text>
@@ -253,7 +253,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
     backgroundColor: colors.surface,
     borderColor: colors.border,
-    borderRadius: radii.xl,
+    borderRadius: radii.md,
     padding: spacing.md,
   },
   header: {
@@ -273,8 +273,8 @@ const styles = StyleSheet.create({
   iconBadge: {
     width: 32,
     height: 32,
-    borderRadius: radii.md,
-    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    borderRadius: radii.sm,
+    backgroundColor: 'rgba(20, 184, 166, 0.12)',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: spacing.sm,
@@ -293,7 +293,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceElevated,
     paddingHorizontal: spacing.sm,
     paddingVertical: 4,
-    borderRadius: radii.full,
+    borderRadius: radii.sm,
     borderWidth: 1,
     borderColor: colors.border,
   },
@@ -329,10 +329,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
   },
   centerLabel: {
-    fontSize: 10,
-    fontWeight: fontWeights.bold,
+    fontSize: 11,
+    fontWeight: fontWeights.medium,
     color: colors.textMuted,
-    letterSpacing: 0.8,
   },
   centerAmount: {
     fontSize: fontSizes.lg,
@@ -341,6 +340,7 @@ const styles = StyleSheet.create({
     marginVertical: 2,
     maxWidth: 130,
     textAlign: 'center',
+    fontVariant: ['tabular-nums'],
   },
   centerCategoryCount: {
     fontSize: 10,
@@ -387,12 +387,13 @@ const styles = StyleSheet.create({
     fontWeight: fontWeights.bold,
     color: colors.text,
     marginRight: spacing.xs,
+    fontVariant: ['tabular-nums'],
   },
   percentageBadge: {
     backgroundColor: colors.surfaceElevated,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: radii.sm,
+    borderRadius: radii.xs,
     borderWidth: 1,
     borderColor: colors.borderMuted,
   },
@@ -400,6 +401,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: fontWeights.semibold,
     color: colors.textSecondary,
+    fontVariant: ['tabular-nums'],
   },
   chevron: {
     marginLeft: 4,

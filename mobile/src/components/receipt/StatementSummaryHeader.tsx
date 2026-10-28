@@ -194,7 +194,7 @@ export const StatementSummaryHeader: React.FC<StatementSummaryHeaderProps> = ({
           <TouchableOpacity onPress={onSelectAll} style={styles.bulkButton}>
             <Text style={styles.bulkButtonText}>Select All</Text>
           </TouchableOpacity>
-          <Text style={styles.bulkDivider}>•</Text>
+          <Text style={styles.bulkDivider}>/</Text>
           <TouchableOpacity onPress={onDeselectAll} style={styles.bulkButton}>
             <Text style={styles.bulkButtonText}>Deselect All</Text>
           </TouchableOpacity>

@@ -99,7 +99,7 @@ export default function SettingsScreen() {
         setBackupMessage(`Backup saved: ${res.filename}`);
         Alert.alert(
           'Backup Created',
-          `Your durable backup has been saved as:\n\n${res.filename}\n\nKeep this file safe outside the app to survive any future reinstallation.`
+          `Backup saved to documents:\n\n${res.filename}`
         );
         const updated = await getLatestBackup();
         setLatestLocalBackup(updated);
@@ -165,12 +165,12 @@ export default function SettingsScreen() {
 
       const promptMessage =
         `Found in backup file:\n` +
-        `• ${summary.transactionsCount} Transactions\n` +
-        `• ${summary.categoriesCount} Categories\n` +
-        `• ${summary.budgetsCount} Budgets\n` +
-        `• ${summary.friendsCount} Friends & Reimbursements\n` +
-        `• ${summary.rulesCount} Merchant Rules\n\n` +
-        `Merge this data into your current Bjet Lite database? Existing records and duplicate transactions will be safely preserved.`;
+        `- ${summary.transactionsCount} Transactions\n` +
+        `- ${summary.categoriesCount} Categories\n` +
+        `- ${summary.budgetsCount} Budgets\n` +
+        `- ${summary.friendsCount} Friends & Reimbursements\n` +
+        `- ${summary.rulesCount} Merchant Rules\n\n` +
+        `Merge backup records? Existing data and duplicates will be preserved.`;
 
       Alert.alert(promptTitle, promptMessage, [
         { text: 'Cancel', style: 'cancel' },
@@ -186,11 +186,11 @@ export default function SettingsScreen() {
                 Alert.alert(
                   'Restore Successful',
                   `Successfully imported:\n` +
-                  `• ${s.transactionsCount} Transactions\n` +
-                  `• ${s.categoriesCount} Categories\n` +
-                  `• ${s.budgetsCount} Budgets\n` +
-                  `• ${s.friendsCount} Friends\n\n` +
-                  `${res.skippedDuplicates} duplicate/unsupported records were safely skipped.`
+                  `- ${s.transactionsCount} Transactions\n` +
+                  `- ${s.categoriesCount} Categories\n` +
+                  `- ${s.budgetsCount} Budgets\n` +
+                  `- ${s.friendsCount} Friends\n\n` +
+                  `${res.skippedDuplicates} duplicate records skipped.`
                 );
                 setBackupMessage(`Restored ${s.transactionsCount} transactions safely.`);
               } else {
@@ -229,7 +229,6 @@ export default function SettingsScreen() {
         </TouchableOpacity>
         <View style={styles.headerTitles}>
           <Text style={styles.title}>Settings</Text>
-          <Text style={styles.subtitle}>Account profile, preferences, and backups</Text>
         </View>
       </View>
 
@@ -316,7 +315,7 @@ export default function SettingsScreen() {
             <View style={styles.settingTextContainer}>
               <Text style={styles.settingTitle}>Categories</Text>
               <Text style={styles.settingDescription}>
-                Manage custom categories & view system defaults
+                Custom categories and default lists
               </Text>
             </View>
           </View>
@@ -337,7 +336,7 @@ export default function SettingsScreen() {
             <View style={styles.settingTextContainer}>
               <Text style={styles.settingTitle}>Merchant Rules</Text>
               <Text style={styles.settingDescription}>
-                Auto-categorization preferences by merchant pattern
+                Auto-categorization by merchant name
               </Text>
             </View>
           </View>
@@ -358,7 +357,7 @@ export default function SettingsScreen() {
             <View style={styles.settingTextContainer}>
               <Text style={styles.settingTitle}>Friends & Reimbursements</Text>
               <Text style={styles.settingDescription}>
-                Auto-recognize incoming payments from friends
+                Auto-recognize reimbursement payments
               </Text>
             </View>
           </View>
@@ -379,7 +378,7 @@ export default function SettingsScreen() {
             <View style={styles.settingTextContainer}>
               <Text style={styles.settingTitle}>Budget Presets</Text>
               <Text style={styles.settingDescription}>
-                Reusable monthly budget templates and category limits
+                Monthly budget limit templates
               </Text>
             </View>
           </View>
@@ -391,16 +390,16 @@ export default function SettingsScreen() {
       <Card style={styles.card}>
         <View style={styles.cardHeaderWithIcon}>
           <ShieldCheck size={20} color={colors.brandLight} style={{ marginRight: spacing.xs }} />
-          <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Durable Local Backups</Text>
+          <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Backups</Text>
         </View>
         <Text style={styles.sectionSubtitleText}>
-          Export portable JSON backups outside app-private storage so your financial records survive app uninstalls.
+          Export portable JSON backups outside app storage to preserve records across installations.
         </Text>
 
         <View style={[styles.infoRow, { marginTop: spacing.md }]}>
           <Text style={styles.label}>Auto Snapshots</Text>
           <Text style={[styles.value, { color: colors.brandLight }]}>
-            Active (Saves on transactions & budgets)
+            Active
           </Text>
         </View>
 

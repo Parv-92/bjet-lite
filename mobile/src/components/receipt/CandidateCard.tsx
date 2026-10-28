@@ -179,7 +179,7 @@ const CandidateCardComponent: React.FC<CandidateCardProps> = ({
                   ? `Excluded (${candidate.friendName || 'Reimbursement'})`
                   : 'Excluded (Expense)'
                 : isReimbursement
-                ? `Reimbursement • ${candidate.friendName || 'Friend'}`
+                ? `Reimbursement (${candidate.friendName || 'Friend'})`
                 : 'Expense'}
             </Text>
           </TouchableOpacity>
@@ -187,14 +187,14 @@ const CandidateCardComponent: React.FC<CandidateCardProps> = ({
           <View style={styles.nonSpendingBadgeContainer}>
             <View style={styles.inflowBadge}>
               <ArrowDownLeft color={colors.success} size={13} />
-              <Text style={styles.inflowBadgeText}>Inflow • ₹0 spending</Text>
+              <Text style={styles.inflowBadgeText}>Inflow (₹0 spending)</Text>
             </View>
           </View>
         ) : candidate.direction === 'TOP_UP' ? (
           <View style={styles.nonSpendingBadgeContainer}>
             <View style={styles.topUpBadge}>
               <RefreshCw color={colors.info} size={13} />
-              <Text style={styles.topUpBadgeText}>UPI Lite • ₹0 spending</Text>
+              <Text style={styles.topUpBadgeText}>UPI Lite (₹0 spending)</Text>
             </View>
           </View>
         ) : (

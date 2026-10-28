@@ -268,7 +268,7 @@ export default function TransactionsScreen() {
     const count = selectedIds.size;
     Alert.alert(
       'Delete Transactions',
-      `Are you sure you want to permanently delete ${count} selected transaction${count > 1 ? 's' : ''}? This action cannot be undone.`,
+      `Delete ${count} selected transaction${count > 1 ? 's' : ''}? This action cannot be undone.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -279,7 +279,7 @@ export default function TransactionsScreen() {
               const res = await bulkDeleteMutation.mutateAsync(Array.from(selectedIds));
               setSelectedIds(new Set());
               setIsSelectionMode(false);
-              Alert.alert('Deleted', `Successfully deleted ${res.deleted_count} transaction(s).`);
+              Alert.alert('Deleted', `${res.deleted_count} transaction${res.deleted_count > 1 ? 's' : ''} deleted.`);
             } catch (err) {
               Alert.alert('Cannot Delete', getApiErrorMessage(err));
             }
@@ -302,10 +302,11 @@ export default function TransactionsScreen() {
           <View>
             <Text style={styles.title}>Transactions</Text>
             <Text style={styles.subtitle}>
-              {transactions ? `${transactions.length} transactions` : 'Track and manage your spending'}
+              {transactions ? `${transactions.length} transactions` : 'No transactions recorded'}
             </Text>
           </View>
           <View style={styles.headerRightActions}>
+
             {transactions && transactions.length > 0 && (
               <TouchableOpacity
                 style={styles.selectModeButton}
@@ -551,26 +552,26 @@ export default function TransactionsScreen() {
             }
             ListEmptyComponent={
               <EmptyState
-                icon={<ReceiptText color={colors.textMuted} size={48} />}
+                icon={<ReceiptText color={colors.textMuted} size={40} />}
                 title={
                   categoryFilter
-                    ? 'No Matching Transactions'
+                    ? 'No matching transactions'
                     : selectedFilter === 'ALL'
-                    ? 'No Transactions Yet'
-                    : `No ${FILTER_OPTIONS.find((f) => f.key === selectedFilter)?.label} Transactions`
+                    ? 'No transactions'
+                    : `No ${FILTER_OPTIONS.find((f) => f.key === selectedFilter)?.label.toLowerCase()} transactions`
                 }
                 description={
                   categoryFilter
-                    ? `No transactions found for category "${categoryFilter.name}".`
+                    ? `No transactions in ${categoryFilter.name}.`
                     : selectedFilter === 'ALL'
-                    ? 'Tap "+ Add" to record your first transaction.'
-                    : `No transactions match the "${FILTER_OPTIONS.find((f) => f.key === selectedFilter)?.label}" filter.`
+                    ? 'Record transactions manually or import a monthly UPI statement.'
+                    : `No transactions match the ${FILTER_OPTIONS.find((f) => f.key === selectedFilter)?.label.toLowerCase()} filter.`
                 }
                 actionLabel={
                   categoryFilter
-                    ? 'Clear Category Filter'
+                    ? 'Clear category filter'
                     : selectedFilter === 'ALL'
-                    ? 'Add Transaction'
+                    ? 'Add transaction'
                     : undefined
                 }
                 onAction={
@@ -582,6 +583,7 @@ export default function TransactionsScreen() {
                 }
               />
             }
+
           />
 
           {/* Bottom Floating Bulk Action Bar */}
@@ -730,8 +732,8 @@ const styles = StyleSheet.create({
     gap: 5,
     paddingHorizontal: spacing.sm + 2,
     paddingVertical: spacing.xs + 2,
-    borderRadius: 20,
-    backgroundColor: colors.surfaceElevated,
+    borderRadius: radii.sm,
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
   },
@@ -743,10 +745,10 @@ const styles = StyleSheet.create({
   activeCategoryPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    backgroundColor: colors.surfaceElevated,
     borderWidth: 1,
     borderColor: colors.brandLight,
-    borderRadius: 20,
+    borderRadius: radii.sm,
     paddingLeft: spacing.sm + 2,
     paddingRight: 6,
     paddingVertical: 3,
@@ -766,25 +768,25 @@ const styles = StyleSheet.create({
   activeCategoryPillText: {
     color: colors.brandLight,
     fontSize: fontSizes.xs,
-    fontWeight: fontWeights.bold,
+    fontWeight: fontWeights.semibold,
     flexShrink: 1,
   },
   clearCategoryButton: {
     marginLeft: 4,
     padding: 2,
     borderRadius: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
   },
   filterChip: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs + 2,
-    borderRadius: 20,
-    backgroundColor: colors.surfaceElevated,
+    borderRadius: radii.sm,
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
   },
   filterChipActive: {
-    backgroundColor: 'rgba(16, 185, 129, 0.18)',
+    backgroundColor: colors.surfaceElevated,
     borderColor: colors.brandLight,
   },
   filterChipText: {
@@ -794,7 +796,7 @@ const styles = StyleSheet.create({
   },
   filterChipTextActive: {
     color: colors.brandLight,
-    fontWeight: fontWeights.bold,
+    fontWeight: fontWeights.semibold,
   },
   listWrapper: {
     flex: 1,
@@ -830,17 +832,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sectionTitle: {
-    color: colors.textSecondary,
-    fontSize: fontSizes.xs,
-    fontWeight: fontWeights.bold,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
+    color: colors.text,
+    fontSize: fontSizes.sm,
+    fontWeight: fontWeights.semibold,
   },
   sectionBadge: {
     backgroundColor: colors.surfaceElevated,
     paddingHorizontal: spacing.sm,
     paddingVertical: 1,
-    borderRadius: radii.full,
+    borderRadius: radii.sm,
     borderWidth: 1,
     borderColor: colors.borderMuted,
   },
@@ -849,17 +849,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
+    paddingVertical: 2,
     borderRadius: radii.xs,
     borderWidth: 1,
   },
   movementBadgeNegative: {
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    borderColor: 'rgba(239, 68, 68, 0.3)',
+    backgroundColor: 'rgba(244, 63, 94, 0.08)',
+    borderColor: 'rgba(244, 63, 94, 0.25)',
   },
   movementBadgePositive: {
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
-    borderColor: 'rgba(16, 185, 129, 0.3)',
+    backgroundColor: 'rgba(20, 184, 166, 0.08)',
+    borderColor: 'rgba(20, 184, 166, 0.25)',
   },
   movementBadgeNeutral: {
     backgroundColor: colors.surfaceElevated,
@@ -867,7 +867,8 @@ const styles = StyleSheet.create({
   },
   movementText: {
     fontSize: 11,
-    fontWeight: fontWeights.bold,
+    fontWeight: fontWeights.semibold,
+    fontVariant: ['tabular-nums'],
   },
   movementTextNegative: {
     color: colors.danger,
@@ -878,6 +879,7 @@ const styles = StyleSheet.create({
   movementTextNeutral: {
     color: colors.textMuted,
   },
+
   sectionBadgeText: {
     color: colors.textMuted,
     fontSize: 10,

@@ -420,7 +420,7 @@ export default function CategoryTransactionsScreen() {
           <EmptyState
             icon={<ReceiptText color={colors.textMuted} size={44} />}
             title="No Transactions"
-            description={`No transactions found for ${categoryName} in ${monthName} ${selectedYear}.`}
+            description={`No transactions recorded for ${categoryName} in ${monthName} ${selectedYear}.`}
           />
         ) : (
           /* Collapsible Date Groups */
@@ -561,8 +561,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: fontSizes.xs,
     fontWeight: fontWeights.medium,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
   },
   summaryPeriod: {
     color: colors.textMuted,
@@ -589,6 +587,7 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: fontWeights.bold,
     letterSpacing: -0.5,
+    fontVariant: ['tabular-nums'],
   },
   reimbOffsetRow: {
     flexDirection: 'row',
@@ -664,8 +663,6 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: fontSizes.sm,
     fontWeight: fontWeights.bold,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
   },
   sectionSubtitle: {
     color: colors.textMuted,
@@ -721,6 +718,7 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: fontSizes.xs,
     fontWeight: fontWeights.semibold,
+    fontVariant: ['tabular-nums'],
   },
   dateGroupItems: {
     paddingTop: 2,

@@ -197,7 +197,7 @@ export default function ScanScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>UPI Statement Import</Text>
         <Text style={styles.subtitle}>
-          Import monthly statements from Google Pay, Paytm, or PhonePe directly into your local budget.
+          Import statements from Google Pay, Paytm, or PhonePe.
         </Text>
       </View>
 
@@ -219,7 +219,7 @@ export default function ScanScreen() {
             {selectedFile.name}
           </Text>
           <Text style={styles.fileMeta}>
-            PDF Document • {formatFileSize(selectedFile.size)}
+            PDF ({formatFileSize(selectedFile.size)})
           </Text>
 
           {isExtracting ? (
@@ -239,7 +239,7 @@ export default function ScanScreen() {
             <View style={styles.actionGroup}>
               <Button
                 title="Import & Review Transactions"
-                icon={<ArrowRight color="#FFFFFF" size={18} />}
+                icon={<ArrowRight color={colors.background} size={18} />}
                 onPress={handleImportAndReview}
                 variant="primary"
                 style={styles.primaryActionButton}
@@ -261,14 +261,14 @@ export default function ScanScreen() {
             <View style={styles.heroIconCircle}>
               <Upload color={colors.brand} size={36} />
             </View>
-            <Text style={styles.heroTitle}>Select Monthly Statement</Text>
+            <Text style={styles.heroTitle}>Select statement</Text>
             <Text style={styles.heroDescription}>
-              Select an official monthly UPI statement in PDF format to automatically extract transactions.
+              Select a statement PDF to extract transactions.
             </Text>
 
             <Button
-              title="Select PDF Statement"
-              icon={<FileText color="#FFFFFF" size={18} />}
+              title="Select statement PDF"
+              icon={<FileText color={colors.background} size={18} />}
               onPress={handleDocumentPick}
               style={styles.selectButton}
             />
@@ -276,13 +276,13 @@ export default function ScanScreen() {
 
           {/* Supported Providers Card */}
           <Card style={styles.providersCard}>
-            <Text style={styles.sectionHeading}>Supported Formats</Text>
+            <Text style={styles.sectionHeading}>Supported formats</Text>
 
             <View style={styles.providerRow}>
               <CheckCircle2 color={colors.brandLight} size={18} style={styles.checkIcon} />
               <View style={styles.providerInfo}>
-                <Text style={styles.providerName}>Google Pay UPI Statement</Text>
-                <Text style={styles.providerDesc}>Monthly activity statement PDF</Text>
+                <Text style={styles.providerName}>Google Pay</Text>
+                <Text style={styles.providerDesc}>Monthly statement</Text>
               </View>
             </View>
 
@@ -291,8 +291,8 @@ export default function ScanScreen() {
             <View style={styles.providerRow}>
               <CheckCircle2 color={colors.brandLight} size={18} style={styles.checkIcon} />
               <View style={styles.providerInfo}>
-                <Text style={styles.providerName}>Paytm UPI Statement</Text>
-                <Text style={styles.providerDesc}>Monthly or date-range transaction statement PDF</Text>
+                <Text style={styles.providerName}>Paytm</Text>
+                <Text style={styles.providerDesc}>Transaction statement</Text>
               </View>
             </View>
 
@@ -301,8 +301,8 @@ export default function ScanScreen() {
             <View style={styles.providerRow}>
               <CheckCircle2 color={colors.brandLight} size={18} style={styles.checkIcon} />
               <View style={styles.providerInfo}>
-                <Text style={styles.providerName}>PhonePe Statement</Text>
-                <Text style={styles.providerDesc}>Official monthly account statement PDF</Text>
+                <Text style={styles.providerName}>PhonePe</Text>
+                <Text style={styles.providerDesc}>Account statement</Text>
               </View>
             </View>
           </Card>
@@ -311,10 +311,10 @@ export default function ScanScreen() {
           <Card style={styles.privacyCard}>
             <View style={styles.privacyHeader}>
               <ShieldCheck color={colors.brandLight} size={20} style={{ marginRight: spacing.xs }} />
-              <Text style={styles.privacyTitle}>100% Offline & Private</Text>
+              <Text style={styles.privacyTitle}>Local processing</Text>
             </View>
             <Text style={styles.privacyText}>
-              Statements are processed completely on your device using client-side PDF parsing. Your financial records are never uploaded to any cloud server.
+              Statements are processed directly on this device. Financial records are never uploaded to external servers.
             </Text>
           </Card>
         </View>
@@ -356,7 +356,7 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    backgroundColor: 'rgba(20, 184, 166, 0.12)',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.md,
@@ -388,8 +388,6 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: fontSizes.xs,
     fontWeight: fontWeights.semibold,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
     marginBottom: spacing.sm,
   },
   providerRow: {
@@ -449,7 +447,7 @@ const styles = StyleSheet.create({
     width: 68,
     height: 68,
     borderRadius: 34,
-    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    backgroundColor: 'rgba(20, 184, 166, 0.12)',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.md,

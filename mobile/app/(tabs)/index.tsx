@@ -25,7 +25,6 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
-  Sparkles,
   Wallet,
   Plus,
   BookmarkCheck,
@@ -174,7 +173,7 @@ export default function OverviewScreen() {
               setShowPresetModal(false);
               Alert.alert(
                 'Success',
-                `Preset "${preset.name}" applied successfully to ${monthName} ${selectedYear}!`
+                `Preset "${preset.name}" applied.`
               );
             } catch (err) {
               Alert.alert('Error', getApiErrorMessage(err));
@@ -220,12 +219,8 @@ export default function OverviewScreen() {
       {/* Top Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <View style={styles.brandRow}>
-            <Sparkles color={colors.brand} size={14} />
-            <Text style={styles.brandTag}>BJET LITE</Text>
-          </View>
           <Text style={styles.welcomeTitle} numberOfLines={1}>
-            Hello, {displayName}
+            {displayName || 'Overview'}
           </Text>
         </View>
 
@@ -236,7 +231,7 @@ export default function OverviewScreen() {
             accessibilityLabel="Apply budget preset"
             activeOpacity={0.8}
           >
-            <BookmarkCheck color="#F59E0B" size={15} />
+            <BookmarkCheck color={colors.textSecondary} size={15} />
             <Text style={styles.presetsButtonText}>Presets</Text>
           </TouchableOpacity>
 
@@ -276,7 +271,7 @@ export default function OverviewScreen() {
           activeOpacity={0.8}
         >
           <Text style={styles.jumpBannerText}>
-            Jump to Previous Completed Month ({MONTH_NAMES[prevCompletedMonth - 1]} {prevCompletedYear})
+            View {MONTH_NAMES[prevCompletedMonth - 1]} {prevCompletedYear}
           </Text>
           <ArrowRight size={13} color={colors.brandLight} />
         </TouchableOpacity>
@@ -387,7 +382,7 @@ export default function OverviewScreen() {
             ) : !presets || presets.length === 0 ? (
               <View style={styles.modalEmpty}>
                 <Text style={styles.modalEmptyText}>
-                  No presets available. Create presets in Settings → Budget Presets.
+                  No presets found. Create presets in Settings → Presets.
                 </Text>
               </View>
             ) : (
@@ -440,18 +435,6 @@ const styles = StyleSheet.create({
   headerLeft: {
     flex: 1,
   },
-  brandRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 4,
-  },
-  brandTag: {
-    color: colors.brandLight,
-    fontSize: fontSizes.xs,
-    fontWeight: fontWeights.bold,
-    letterSpacing: 1.2,
-  },
   welcomeTitle: {
     color: colors.text,
     fontSize: fontSizes.xl,
@@ -468,15 +451,15 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    backgroundColor: colors.surfaceElevated,
     borderRadius: radii.sm,
     borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.3)',
+    borderColor: colors.border,
   },
   presetsButtonText: {
-    color: '#F59E0B',
+    color: colors.textSecondary,
     fontSize: fontSizes.xs,
-    fontWeight: fontWeights.semibold,
+    fontWeight: fontWeights.medium,
   },
   addButton: {
     flexDirection: 'row',

@@ -378,7 +378,7 @@ export default function StatementReviewScreen() {
           <View style={styles.appBarTitles}>
             <Text style={styles.appBarTitle}>Statement Review</Text>
             <Text style={styles.appBarSubtitle}>
-              {candidates.length} Candidates • {persistableCount} Can be added
+              {candidates.length} candidates, {persistableCount} to import
             </Text>
           </View>
         </View>
@@ -422,7 +422,7 @@ export default function StatementReviewScreen() {
             <Text style={styles.bottomBarSub}>
               ₹{persistableNetSpending.toLocaleString('en-IN', { minimumFractionDigits: 2 })} net spending
               {persistableReimbursementsCount > 0 ? ` (${persistableReimbursementsCount} reimbursements)` : ''}
-              {` • ${receivedCount - persistableReimbursementsCount} inflows (₹0)`}
+              {receivedCount - persistableReimbursementsCount > 0 ? `, ${receivedCount - persistableReimbursementsCount} inflows (₹0)` : ''}
             </Text>
           </View>
 

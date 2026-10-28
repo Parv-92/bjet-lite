@@ -58,7 +58,7 @@ export default function TransactionDetailScreen() {
   const handleDelete = () => {
     Alert.alert(
       'Delete Transaction',
-      'Are you sure you want to permanently delete this transaction? This action cannot be undone.',
+      'Delete this transaction? This action cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -193,10 +193,10 @@ export default function TransactionDetailScreen() {
             ]}
           >
             {isReimbursement
-              ? 'Incoming Reimbursement'
+              ? 'Reimbursement'
               : isReceived
-              ? 'Incoming Money'
-              : 'Outgoing Spending'}
+              ? 'Incoming'
+              : 'Outgoing'}
           </Text>
         </View>
       </Card>
@@ -441,6 +441,7 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.xxxl * 1.1,
     fontWeight: fontWeights.bold,
     marginBottom: spacing.md,
+    fontVariant: ['tabular-nums'],
   },
   statusBadgeContainer: {
     marginTop: 2,
@@ -449,8 +450,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: fontSizes.xs,
     fontWeight: fontWeights.semibold,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
     marginBottom: spacing.xs,
     marginLeft: spacing.xs,
     marginTop: spacing.sm,
@@ -508,8 +507,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   typePillIncoming: {
-    backgroundColor: 'rgba(16, 185, 129, 0.12)',
-    borderColor: 'rgba(16, 185, 129, 0.3)',
+    backgroundColor: 'rgba(20, 184, 166, 0.12)',
+    borderColor: 'rgba(20, 184, 166, 0.3)',
   },
   typePillOutgoing: {
     backgroundColor: colors.surfaceElevated,

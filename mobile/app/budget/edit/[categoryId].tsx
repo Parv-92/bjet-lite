@@ -200,7 +200,7 @@ export default function EditBudgetScreen() {
           <View style={styles.headerTitleContainer}>
             <Text style={styles.screenTitle}>Edit Budget</Text>
             <Text style={styles.screenSubtitle}>
-              {categoryName} • {monthName} {year}
+              {categoryName}, {monthName} {year}
             </Text>
           </View>
         </View>

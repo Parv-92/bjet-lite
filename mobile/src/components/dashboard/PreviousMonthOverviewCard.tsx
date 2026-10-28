@@ -67,7 +67,7 @@ export const PreviousMonthOverviewCard: React.FC<PreviousMonthOverviewCardProps>
         <View style={styles.badgeContainer}>
           <Calendar size={12} color={isPreviousCompletedMonth ? colors.brandLight : colors.textSecondary} />
           <Text style={[styles.badgeText, isPreviousCompletedMonth && styles.badgeTextActive]}>
-            {isPreviousCompletedMonth ? 'PREVIOUS COMPLETED MONTH' : 'SELECTED PERIOD'}
+            {isPreviousCompletedMonth ? 'Previous completed month' : 'Selected month'}
           </Text>
         </View>
 
@@ -150,14 +150,14 @@ export const PreviousMonthOverviewCard: React.FC<PreviousMonthOverviewCardProps>
             <View style={[styles.budgetPill, styles.budgetPillDanger]}>
               <AlertTriangle size={12} color={colors.danger} />
               <Text style={styles.budgetPillTextDanger}>
-                {overBudgetCount} Over Budget
+                {overBudgetCount} over budget
               </Text>
             </View>
           ) : hasBudgets ? (
             <View style={[styles.budgetPill, styles.budgetPillSuccess]}>
               <CheckCircle2 size={12} color={colors.brandLight} />
               <Text style={styles.budgetPillTextSuccess}>
-                {Math.round(budgetUtilization)}% Used
+                {Math.round(budgetUtilization)}% used
               </Text>
             </View>
           ) : null}
@@ -242,9 +242,8 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     color: colors.textSecondary,
-    fontSize: 10,
-    fontWeight: fontWeights.bold,
-    letterSpacing: 0.8,
+    fontSize: 11,
+    fontWeight: fontWeights.semibold,
   },
   badgeTextActive: {
     color: colors.brandLight,
@@ -261,8 +260,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: fontSizes.xs,
     fontWeight: fontWeights.medium,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
     marginBottom: 4,
   },
   heroAmount: {
@@ -271,6 +268,7 @@ const styles = StyleSheet.create({
     fontWeight: fontWeights.bold,
     letterSpacing: -0.5,
     marginBottom: 4,
+    fontVariant: ['tabular-nums'],
   },
   heroSubtext: {
     color: colors.textMuted,
@@ -307,10 +305,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   flowIconIncoming: {
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    backgroundColor: 'rgba(20, 184, 166, 0.15)',
   },
   flowIconOutgoing: {
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    backgroundColor: 'rgba(244, 63, 94, 0.15)',
   },
   flowLabel: {
     color: colors.textSecondary,
@@ -322,6 +320,7 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.base,
     fontWeight: fontWeights.bold,
     marginBottom: 2,
+    fontVariant: ['tabular-nums'],
   },
   flowAmountNegative: {
     color: colors.danger,
@@ -353,8 +352,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: fontSizes.xs,
     fontWeight: fontWeights.semibold,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
   },
   budgetPill: {
     flexDirection: 'row',
@@ -365,10 +362,10 @@ const styles = StyleSheet.create({
     borderRadius: radii.xs,
   },
   budgetPillSuccess: {
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    backgroundColor: 'rgba(20, 184, 166, 0.1)',
   },
   budgetPillDanger: {
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    backgroundColor: 'rgba(244, 63, 94, 0.1)',
   },
   budgetPillTextSuccess: {
     color: colors.brandLight,
@@ -414,6 +411,7 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: fontSizes.sm,
     fontWeight: fontWeights.semibold,
+    fontVariant: ['tabular-nums'],
   },
   budgetMetricValueSuccess: {
     color: colors.brandLight,
@@ -427,6 +425,5 @@ const styles = StyleSheet.create({
   noBudgetNoticeText: {
     color: colors.textMuted,
     fontSize: fontSizes.xs,
-    fontStyle: 'italic',
   },
 });

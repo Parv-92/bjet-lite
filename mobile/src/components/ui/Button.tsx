@@ -135,9 +135,10 @@ const buttonStyles = StyleSheet.create({
 
 const textStyles = StyleSheet.create({
   primary: {
-    color: '#020617', // Dark contrast on emerald
+    color: colors.background,
     fontWeight: fontWeights.bold,
   },
+
   secondary: {
     color: colors.text,
   },

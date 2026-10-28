@@ -1,35 +1,37 @@
 /**
  * Bjet Mobile Design System - Color Palette
- * Dark-first curated theme tokens conforming to Bjet specifications.
+ * Graphite Ledger palette: matte carbon background, tactile surfaces,
+ * hairline borders, and calibrated mint/ochre financial signals.
  */
 export const colors = {
-  background: '#020617', // Slate 950
-  surface: '#0f172a',    // Slate 900
-  surfaceElevated: '#1e293b', // Slate 800
-  surfaceHover: '#1e293b',
-  border: '#334155',     // Slate 700
-  borderMuted: '#1e293b',
+  background: '#0B0D10', // Deep carbon graphite
+  surface: '#13151A',    // Elevated plane
+  surfaceElevated: '#1A1D24', // Card and control surface
+  surfaceHover: '#20242E',
+  border: '#242832',     // Precision boundary
+  borderMuted: '#1A1D25',
 
-  // Brand Accents
-  brand: '#10b981',      // Emerald 500
-  brandDark: '#059669',  // Emerald 600
-  brandLight: '#34d399', // Emerald 400
+  // Financial Accents (Calibrated Mint & Amber)
+  brand: '#14B8A6',      // Restrained mint primary
+  brandDark: '#0D9488',  // Deep mint
+  brandLight: '#2DD4BF', // Crisp mint highlight
 
-  // Typography
-  text: '#f8fafc',          // Slate 50
-  textSecondary: '#94a3b8', // Slate 400
-  textMuted: '#64748b',     // Slate 500
+  // High-Legibility Typography
+  text: '#F3F4F6',          // Crisp off-white paper
+  textSecondary: '#9CA3AF', // Neutral cool gray
+  textMuted: '#64748B',     // Subdued metadata
 
-  // Functional Statuses
-  danger: '#ef4444',     // Red 500
-  dangerDark: '#b91c1c', // Red 700
-  warning: '#f59e0b',    // Amber 500
-  info: '#3b82f6',       // Blue 500
-  success: '#10b981',    // Emerald 500
+  // Functional Financial Statuses
+  danger: '#F43F5E',     // Clean crimson red (outflows & budget warnings)
+  dangerDark: '#BE123C', // Deep crimson
+  warning: '#F59E0B',    // Amber
+  info: '#38BDF8',       // Sky blue
+  success: '#10B981',    // Emerald success
 
-  // Overlay / Backdrop
-  backdrop: 'rgba(2, 6, 23, 0.75)',
-  cardHighlight: 'rgba(255, 255, 255, 0.03)',
+  // Overlays
+  backdrop: 'rgba(11, 13, 16, 0.88)',
+  cardHighlight: 'rgba(255, 255, 255, 0.02)',
 } as const;
 
 export type ColorTokens = typeof colors;
+

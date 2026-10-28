@@ -56,6 +56,10 @@ export const typography = {
     fontWeight: fontWeights.semibold,
     lineHeight: 20,
   },
+  numberTabular: {
+    fontVariant: ['tabular-nums'] as TextStyle['fontVariant'],
+  },
 } as const;
 
 export type TypographyTokens = typeof typography;
+

@@ -224,7 +224,7 @@ export default function ReceiptReviewScreen() {
           </TouchableOpacity>
           <View style={styles.headerTitleContainer}>
             <Text style={styles.screenTitle}>Review Receipt</Text>
-            <Text style={styles.screenSubtitle}>Draft #{transactionId} • Pending Confirmation</Text>
+            <Text style={styles.screenSubtitle}>Draft #{transactionId}</Text>
           </View>
         </View>
 

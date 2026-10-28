@@ -27,24 +27,24 @@ export default function TabsLayout() {
         headerShown: false,
         tabBarStyle: {
           backgroundColor: colors.surface,
-          borderTopColor: colors.borderMuted,
-          borderTopWidth: 1,
-          height: Platform.OS === 'ios' ? 88 : 64,
-          paddingBottom: Platform.OS === 'ios' ? 28 : 10,
+          borderTopColor: colors.border,
+          borderTopWidth: StyleSheet.hairlineWidth,
+          height: Platform.OS === 'ios' ? 86 : 62,
+          paddingBottom: Platform.OS === 'ios' ? 26 : 8,
           paddingTop: 8,
+          elevation: 0,
         },
-        tabBarActiveTintColor: colors.brand,
+        tabBarActiveTintColor: colors.brandLight,
         tabBarInactiveTintColor: colors.textMuted,
         tabBarItemStyle: {
           flex: 1,
           alignItems: 'center',
           justifyContent: 'center',
-          paddingVertical: 2,
         },
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: fontWeights.medium,
-          letterSpacing: -0.2,
+          letterSpacing: 0.1,
           marginTop: 2,
         },
       }}
@@ -57,26 +57,24 @@ export default function TabsLayout() {
           tabBarIcon: ({ color, focused }) => (
             <ReceiptText
               color={color}
-              size={22}
-              strokeWidth={focused ? 2.3 : 1.8}
+              size={21}
+              strokeWidth={focused ? 2.2 : 1.7}
             />
           ),
         }}
       />
 
-      {/* 2. Scan (Center with subtle restrained accent) */}
+      {/* 2. Scan (Center) */}
       <Tabs.Screen
         name="scan"
         options={{
           title: 'Scan',
           tabBarIcon: ({ color, focused }) => (
-            <View style={[styles.scanIconPill, focused && styles.scanIconPillActive]}>
-              <FileText
-                color={focused ? colors.brandLight : color}
-                size={20}
-                strokeWidth={focused ? 2.3 : 1.8}
-              />
-            </View>
+            <FileText
+              color={color}
+              size={21}
+              strokeWidth={focused ? 2.2 : 1.7}
+            />
           ),
         }}
       />
@@ -89,8 +87,8 @@ export default function TabsLayout() {
           tabBarIcon: ({ color, focused }) => (
             <PieChart
               color={color}
-              size={22}
-              strokeWidth={focused ? 2.3 : 1.8}
+              size={21}
+              strokeWidth={focused ? 2.2 : 1.7}
             />
           ),
         }}
@@ -107,19 +105,3 @@ export default function TabsLayout() {
   );
 }
 
-const styles = StyleSheet.create({
-  scanIconPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 2,
-    borderRadius: 12,
-    backgroundColor: 'rgba(16, 185, 129, 0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.22)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  scanIconPillActive: {
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
-    borderColor: colors.brand,
-  },
-});

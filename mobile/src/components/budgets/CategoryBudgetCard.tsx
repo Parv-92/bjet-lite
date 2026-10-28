@@ -133,7 +133,7 @@ export const CategoryBudgetCard: React.FC<CategoryBudgetCardProps> = ({
         {isOverBudget && (
           <View style={styles.overBudgetTag}>
             <AlertCircle color={colors.danger} size={12} />
-            <Text style={styles.overBudgetTagText}>Limit exceeded for this category</Text>
+            <Text style={styles.overBudgetTagText}>Exceeds budget limit</Text>
           </View>
         )}
       </Card>
@@ -149,8 +149,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   cardOverBudget: {
-    borderColor: 'rgba(239, 68, 68, 0.4)',
-    backgroundColor: 'rgba(239, 68, 68, 0.03)',
+    borderColor: 'rgba(244, 63, 94, 0.4)',
+    backgroundColor: 'rgba(244, 63, 94, 0.04)',
   },
   topRow: {
     flexDirection: 'row',
@@ -206,14 +206,17 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: fontSizes.lg,
     fontWeight: fontWeights.bold,
+    fontVariant: ['tabular-nums'],
   },
   limitText: {
     color: colors.textSecondary,
     fontSize: fontSizes.xs,
+    fontVariant: ['tabular-nums'],
   },
   percentageText: {
     fontSize: fontSizes.sm,
     fontWeight: fontWeights.bold,
+    fontVariant: ['tabular-nums'],
   },
   progressBarBackground: {
     height: 6,
@@ -238,6 +241,7 @@ const styles = StyleSheet.create({
   remainingValue: {
     fontSize: fontSizes.xs,
     fontWeight: fontWeights.semibold,
+    fontVariant: ['tabular-nums'],
   },
   textDanger: {
     color: colors.danger,
@@ -252,7 +256,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     paddingTop: spacing.xs,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(239, 68, 68, 0.2)',
+    borderTopColor: 'rgba(244, 63, 94, 0.2)',
   },
   overBudgetTagText: {
     color: colors.danger,
